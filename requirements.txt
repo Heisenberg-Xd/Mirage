@@ -4,3 +4,4 @@ tavily-python
 sentence-transformers
 python-dotenv
 numpy
+spacy
