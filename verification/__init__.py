@@ -5,7 +5,7 @@ Public API for the hybrid deterministic fact verification engine.
 
 Pipeline order:
     1. Question Analysis & Entity Extraction
-    2. Answer Entity Extraction & Alignment
+    2. Answer Entity Extraction & Alignment (Entity Drift Check)
     3. Claim extraction
     4. Claim filtering (relevance to question)
     5. Authority scoring
@@ -45,16 +45,42 @@ def run_verification(
     logger.info(f"[run_verification] question='{question[:80]}', n_evidence={len(evidence)}")
 
     # ------------------------------------------------------------------ #
-    # Steps 1-3: Entity Alignment & Question parsing
+    # Steps 1-2: Question parsing & Entity Alignment
     # ------------------------------------------------------------------ #
     intent_data = parse_question(question)
     q_entities = extract_entities(question)
     a_entities = extract_entities(answer)
     
-    drift_detected, entity_alignment_score = check_entity_alignment(q_entities, a_entities)
+    drift_detected, entity_alignment_score, primary_q, primary_a = check_entity_alignment(q_entities, a_entities)
 
     # ------------------------------------------------------------------ #
-    # Step 4: Extract atomic claims from the answer
+    # Entity Drift Short-Circuit
+    # ------------------------------------------------------------------ #
+    if drift_detected:
+        logger.warning(f"Entity Drift Detected! Q_entity: '{primary_q}', A_entity: '{primary_a}'")
+        explanation = (
+            f"The model substituted the subject of the question and answered about a different entity "
+            f"('{primary_a}') instead of the one requested by the user ('{primary_q}')."
+        )
+        return VerificationResult(
+            label="Needs Verification",
+            confidence_score=0.10,
+            confidence_pct=10,
+            explanation=explanation,
+            claims=[],
+            claim_verifications=[],
+            evidence=evidence,
+            authority_scores=score_all_sources(evidence) if evidence else [],
+            question_entities=q_entities,
+            answer_entities=a_entities,
+            primary_q_entity=primary_q,
+            primary_a_entity=primary_a,
+            entity_drift_detected=True,
+            logic_trace=["Entity drift detected → Pipeline short-circuited. Base: Needs Verification (10%)"]
+        )
+
+    # ------------------------------------------------------------------ #
+    # Step 3: Extract atomic claims from the answer
     # ------------------------------------------------------------------ #
     claims: list[Claim] = extract_claims(answer)
     logger.info(f"Extracted {len(claims)} claim(s)")
@@ -63,17 +89,17 @@ def run_verification(
         return _empty_result(answer, evidence)
 
     # ------------------------------------------------------------------ #
-    # Step 5: Question Relevance Filter
+    # Step 4: Question Relevance Filter
     # ------------------------------------------------------------------ #
     claims, has_hallucinated_claims = filter_claims_by_question(claims, question)
 
     # ------------------------------------------------------------------ #
-    # Step 6: Score authority of each evidence source
+    # Step 5: Score authority of each evidence source
     # ------------------------------------------------------------------ #
     authority_scores: list[float] = score_all_sources(evidence)
 
     # ------------------------------------------------------------------ #
-    # Step 7: CrossEncoder & NLI Inference
+    # Step 6 & 7: CrossEncoder & NLI Inference
     # ------------------------------------------------------------------ #
     ce_model = load_cross_encoder()
     nli_model = load_nli_model()
@@ -140,8 +166,6 @@ def run_verification(
     # ------------------------------------------------------------------ #
     # Step 10: Deterministic explanation
     # ------------------------------------------------------------------ #
-    # We pass components dict as empty since we don't use it in templates anymore, or we should update templates!
-    # Let's pass {} for components for now, we will update templates.py next.
     explanation = generate_explanation(
         label, verifications, evidence, {},
         drift_detected, has_false_hallucination
@@ -167,6 +191,8 @@ def run_verification(
         authority_scores=authority_scores,
         question_entities=q_entities,
         answer_entities=a_entities,
+        primary_q_entity=primary_q,
+        primary_a_entity=primary_a,
         entity_drift_detected=drift_detected,
         has_false_hallucination=has_false_hallucination,
         has_unverified_context=has_unverified_context,
@@ -186,5 +212,5 @@ def _empty_result(answer: str, evidence: list[dict]) -> VerificationResult:
         claims=[],
         claim_verifications=[],
         evidence=evidence,
-        authority_scores=score_all_sources(evidence),
+        authority_scores=score_all_sources(evidence) if evidence else [],
     )

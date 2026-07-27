@@ -77,6 +77,8 @@ class VerificationResult:
     # Entity Drift
     question_entities: list[str] = field(default_factory=list)
     answer_entities: list[str] = field(default_factory=list)
+    primary_q_entity: str = "None"
+    primary_a_entity: str = "None"
     entity_drift_detected: bool = False
     
     # Hallucination / Context Flags

@@ -499,27 +499,51 @@ def main():
 
         # ---- Tab 1: Overview ----
         with tab1:
-            # Warnings
-            if getattr(result, "has_false_hallucination", False):
+            # ------ Entity Alignment Card (always shown) ------
+            q_entity = getattr(result, "primary_q_entity", "None")
+            a_entity = getattr(result, "primary_a_entity", "None")
+            drift    = getattr(result, "entity_drift_detected", False)
+            
+            match_color   = "#EF4444" if drift else "#22C55E"
+            match_label   = "❌ Mismatch — Entity Drift Detected" if drift else "✅ Match"
+            drift_border  = "#EF4444" if drift else "#22C55E"
+            
+            st.markdown(f"""
+            <div class="saas-card" style="border-left: 4px solid {drift_border}; margin-top: 1rem;">
+                <div class="card-header" style="color:{drift_border};">🎯 Question-Answer Entity Alignment</div>
+                <div class="card-body">
+                    <table style="width:100%; border-collapse:collapse; color:#F8FAFC;">
+                        <tr>
+                            <td style="padding:0.4rem 0; color:#64748B; width:200px;">Primary Question Entity</td>
+                            <td style="padding:0.4rem 0; font-weight:600;">{q_entity}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:0.4rem 0; color:#64748B;">Primary Answer Entity</td>
+                            <td style="padding:0.4rem 0; font-weight:600;">{a_entity}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:0.4rem 0; color:#64748B;">Entity Match</td>
+                            <td style="padding:0.4rem 0; font-weight:600; color:{match_color};">{match_label}</td>
+                        </tr>
+                    </table>
+                    {"<p style='margin-top:0.75rem; color:#EF4444;'>The model substituted the subject of the question and answered about a different entity instead of the one requested by the user. Claim verification was not performed.</p>" if drift else ""}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # ------ Other Warnings ------
+            if not drift and getattr(result, "has_false_hallucination", False):
                 st.markdown("""
                 <div class="saas-card" style="border-left: 4px solid #EF4444; margin-top: 1rem; margin-bottom: 0;">
                     <div class="card-header" style="color:#EF4444;">⚠️ Hallucination Warning</div>
                     <div class="card-body">The answer introduced an additional factual claim that is explicitly contradicted by evidence. Confidence has been penalized.</div>
                 </div>
                 """, unsafe_allow_html=True)
-            elif getattr(result, "has_unverified_context", False):
+            elif not drift and getattr(result, "has_unverified_context", False):
                 st.markdown("""
                 <div class="saas-card" style="border-left: 4px solid #F59E0B; margin-top: 1rem; margin-bottom: 0;">
                     <div class="card-header" style="color:#F59E0B;">ℹ️ Unverified Additional Information</div>
                     <div class="card-body">The answer contains extra information not directly related to your question that could not be verified. This does not affect confidence, but should be treated with caution.</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            if getattr(result, "entity_drift_detected", False):
-                st.markdown("""
-                <div class="saas-card" style="border-left: 4px solid #F59E0B; margin-top: 1rem; margin-bottom: 0;">
-                    <div class="card-header" style="color:#F59E0B;">⚠️ Entity Drift Detected</div>
-                    <div class="card-body">The answer shifted focus to entities not found in the original question.</div>
                 </div>
                 """, unsafe_allow_html=True)
 
