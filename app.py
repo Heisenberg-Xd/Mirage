@@ -300,18 +300,13 @@ def inject_custom_css():
         color: #3b76e8;
         text-decoration: underline;
     }
-
-    /* Component breakdown bar */
-    .component-row {
-        display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;
+    
+    /* Logic Trace List */
+    .logic-trace-list {
+        margin: 0; padding-left: 1.5rem; color: #F8FAFC;
     }
-    .component-name {
-        width: 130px; font-size: 0.82rem; color: #94A3B8; flex-shrink: 0;
-    }
-    .component-bar-wrap { flex: 1; }
-    .component-pct {
-        width: 42px; text-align: right; font-size: 0.82rem;
-        color: #F8FAFC; font-weight: 600; flex-shrink: 0;
+    .logic-trace-list li {
+        margin-bottom: 0.5rem;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -331,33 +326,6 @@ def render_saas_card(title: str, content: str, icon: str = ""):
     <div class="saas-card">
         <div class="card-header">{icon} {title}</div>
         <div class="card-body" style="color: #F8FAFC;">{content}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def render_score_bar(score_pct: int, color: str = "#4F8CFF"):
-    st.markdown(f"""
-    <div class="score-bar-wrap">
-        <div class="score-bar-bg">
-            <div class="score-bar-fill"
-                 style="width:{score_pct}%; background:{color};"></div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def render_component_bar(name: str, value: float, color: str = "#4F8CFF"):
-    pct = round(value * 100)
-    st.markdown(f"""
-    <div class="component-row">
-        <div class="component-name">{name}</div>
-        <div class="component-bar-wrap">
-            <div class="score-bar-bg">
-                <div class="score-bar-fill"
-                     style="width:{pct}%; background:{color};"></div>
-            </div>
-        </div>
-        <div class="component-pct">{pct}%</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -392,7 +360,7 @@ def main():
             '⚙️ <b style="color:#F8FAFC">Filter</b>: CE Relevance Ranking<br>'
             '🧠 <b style="color:#F8FAFC">Voting</b>: DeBERTa v3 NLI<br>'
             '📏 <b style="color:#F8FAFC">Alignment</b>: RapidFuzz Entities<br>'
-            '📊 <b style="color:#F8FAFC">Score</b>: 8-Component Composite'
+            '📊 <b style="color:#F8FAFC">Score</b>: Strict Rule-Based Logic'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -468,7 +436,7 @@ def main():
             st.write("Extracting atomic claims and analyzing entities...")
             st.write("Running CrossEncoder for relevance filtering...")
             st.write("Running DeBERTa v3 for Natural Language Inference (NLI)...")
-            st.write("Aggregating 8-component confidence score...")
+            st.write("Executing rule-based confidence scoring...")
 
             try:
                 result: VerificationResult = run_verification(raw_answer, evidence, question)
@@ -531,19 +499,27 @@ def main():
 
         # ---- Tab 1: Overview ----
         with tab1:
-            if result.entity_drift_detected:
+            # Warnings
+            if getattr(result, "has_false_hallucination", False):
+                st.markdown("""
+                <div class="saas-card" style="border-left: 4px solid #EF4444; margin-top: 1rem; margin-bottom: 0;">
+                    <div class="card-header" style="color:#EF4444;">⚠️ Hallucination Warning</div>
+                    <div class="card-body">The answer introduced an additional factual claim that is explicitly contradicted by evidence. Confidence has been penalized.</div>
+                </div>
+                """, unsafe_allow_html=True)
+            elif getattr(result, "has_unverified_context", False):
                 st.markdown("""
                 <div class="saas-card" style="border-left: 4px solid #F59E0B; margin-top: 1rem; margin-bottom: 0;">
-                    <div class="card-header" style="color:#F59E0B;">⚠️ Entity Drift Detected</div>
-                    <div class="card-body">The answer introduced major entities not found in the original question.</div>
+                    <div class="card-header" style="color:#F59E0B;">ℹ️ Unverified Additional Information</div>
+                    <div class="card-body">The answer contains extra information not directly related to your question that could not be verified. This does not affect confidence, but should be treated with caution.</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            if result.has_hallucinated_claims:
+            if getattr(result, "entity_drift_detected", False):
                 st.markdown("""
                 <div class="saas-card" style="border-left: 4px solid #F59E0B; margin-top: 1rem; margin-bottom: 0;">
-                    <div class="card-header" style="color:#F59E0B;">⚠️ Hallucinated Expansion Detected</div>
-                    <div class="card-body">The answer contains factual claims that are irrelevant to the user's question.</div>
+                    <div class="card-header" style="color:#F59E0B;">⚠️ Entity Drift Detected</div>
+                    <div class="card-body">The answer shifted focus to entities not found in the original question.</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -555,37 +531,18 @@ def main():
             </div>
             """, unsafe_allow_html=True)
 
-            # Confidence component breakdown
-            st.markdown("""
+            # Logic Trace
+            logic_html = "".join([f"<li>{trace}</li>" for trace in getattr(result, "logic_trace", [])])
+            st.markdown(f"""
             <div class="saas-card" style="border-left: 4px solid #4F8CFF;">
-                <div class="card-header" style="color:#4F8CFF;">📊 8-Component Confidence Breakdown</div>
+                <div class="card-header" style="color:#4F8CFF;">🧠 Verification Logic Trace</div>
                 <div class="card-body">
+                    <ul class="logic-trace-list">
+                        {logic_html}
+                    </ul>
+                </div>
+            </div>
             """, unsafe_allow_html=True)
-
-            components = {
-                "NLI Entailment": result.nli_score,
-                "CE Relevance": result.ce_score,
-                "Entity Alignment": result.entity_score,
-                "Q-Relevance": result.q_relevance_score,
-                "Source Authority": result.authority_avg,
-                "Support Ratio": result.support_ratio,
-                "Src Diversity": result.diversity_score,
-                "No Contradictions": result.contradiction_penalty,
-            }
-            component_colors = {
-                "NLI Entailment": "#4F8CFF",
-                "CE Relevance": "#22C55E",
-                "Entity Alignment": "#A78BFA",
-                "Q-Relevance": "#F472B6",
-                "Source Authority": "#F59E0B",
-                "Support Ratio": "#38BDF8",
-                "Src Diversity": "#34D399",
-                "No Contradictions": "#FB7185"
-            }
-            for name, val in components.items():
-                render_component_bar(name, val, color=component_colors[name])
-
-            st.markdown("</div></div>", unsafe_allow_html=True)
 
         # ---- Tab 2: Claims Analysis ----
         with tab2:
@@ -604,15 +561,12 @@ def main():
                     icon    = VERDICT_ICONS.get(row["verdict"], "❓")
                     color   = VERDICT_COLORS.get(row["verdict"], "#94A3B8")
                     neg_tag = ' <span style="color:#A78BFA; font-size:0.75rem;">[negated]</span>' if row["is_negated"] else ""
-                    rel_tag = ' <span style="color:#EF4444; font-size:0.75rem;">[hallucinated]</span>' if not row["is_relevant"] else ""
+                    rel_tag = ' <span style="color:#94A3B8; font-size:0.75rem;">[additional context]</span>' if not row["is_relevant"] else ""
                     
-                    if not row["is_relevant"]:
-                        meta_text = f"Claim ignored for factual verification — irrelevant to question"
-                    else:
-                        meta_text = (f"NLI Entailment: <b style='color:#F8FAFC'>{row['best_nli_pct']}%</b> &nbsp;·&nbsp; "
-                                     f"CE Relevance: <b style='color:#F8FAFC'>{row['best_score_pct']}%</b> &nbsp;·&nbsp; "
-                                     f"Supporting: <b style='color:#22C55E'>{row['supporting']}</b> &nbsp;·&nbsp; "
-                                     f"Verdict: <b style='color:{color}'>{row['verdict'].capitalize()}</b>")
+                    meta_text = (f"NLI Entailment: <b style='color:#F8FAFC'>{row['best_nli_pct']}%</b> &nbsp;·&nbsp; "
+                                 f"CE Relevance: <b style='color:#F8FAFC'>{row['best_score_pct']}%</b> &nbsp;·&nbsp; "
+                                 f"Supporting: <b style='color:#22C55E'>{row['supporting']}</b> &nbsp;·&nbsp; "
+                                 f"Verdict: <b style='color:{color}'>{row['verdict'].capitalize()}</b>")
 
                     st.markdown(f"""
                     <div class="claim-row">
@@ -689,15 +643,15 @@ def main():
                         <li><strong style="color:#F8FAFC">Entity Alignment</strong> —
                             RapidFuzz ensures entities in the answer match those in the question to detect drift.</li>
                         <li><strong style="color:#F8FAFC">Question Relevance Filter</strong> —
-                            A CrossEncoder filters out hallucinated extra information that doesn't answer the prompt.</li>
+                            A CrossEncoder filters out conversational filler and additional context that doesn't strictly answer the prompt.</li>
                         <li><strong style="color:#F8FAFC">Query Expansion</strong> —
                             Questions are deterministically expanded to maximize search surface.</li>
                         <li><strong style="color:#F8FAFC">Natural Language Inference (NLI)</strong> —
                             DeBERTa v3 evaluates whether each evidence source entails or contradicts the claims.</li>
                         <li><strong style="color:#F8FAFC">Negation Handling</strong> —
                             Negated claims are extracted via spaCy dependency arcs. Evidence confirming a positive entity naturally supports the negated claim.</li>
-                        <li><strong style="color:#F8FAFC">Weighted composite confidence</strong> —
-                            Eight signals are combined (NLI, CE, Entity Drift, Authority, etc.).</li>
+                        <li><strong style="color:#F8FAFC">Strict Rule-Based Logic</strong> —
+                            Confidence and labels are determined purely by whether the *relevant* claims are supported. Penalties only apply for explicit false information.</li>
                     </ol>
                     <p style="margin-top:1rem; color:#64748B; font-size:0.9rem; font-style:italic;">
                         Because the verification layer generates nothing — it only measures —

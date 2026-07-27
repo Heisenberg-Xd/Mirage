@@ -126,17 +126,25 @@ def run_verification(
     # ------------------------------------------------------------------ #
     # Step 9: Composite confidence score + label
     # ------------------------------------------------------------------ #
-    confidence_score, label, components = compute_confidence(
-        verifications, evidence, authority_scores, entity_alignment_score
+    
+    # Calculate extra context flags
+    irrelevant_verifs = [cv for cv in verifications if not getattr(cv.claim, 'is_relevant_to_question', True)]
+    has_false_hallucination = any(cv.verdict == "contradicted" for cv in irrelevant_verifs)
+    has_unverified_context = any(cv.verdict == "insufficient" for cv in irrelevant_verifs)
+
+    confidence_score, label, logic_trace = compute_confidence(
+        verifications, evidence, authority_scores, entity_alignment_score, has_false_hallucination
     )
     confidence_pct = round(confidence_score * 100)
 
     # ------------------------------------------------------------------ #
     # Step 10: Deterministic explanation
     # ------------------------------------------------------------------ #
+    # We pass components dict as empty since we don't use it in templates anymore, or we should update templates!
+    # Let's pass {} for components for now, we will update templates.py next.
     explanation = generate_explanation(
-        label, verifications, evidence, components,
-        drift_detected, has_hallucinated_claims
+        label, verifications, evidence, {},
+        drift_detected, has_false_hallucination
     )
 
     # ------------------------------------------------------------------ #
@@ -160,15 +168,9 @@ def run_verification(
         question_entities=q_entities,
         answer_entities=a_entities,
         entity_drift_detected=drift_detected,
-        has_hallucinated_claims=has_hallucinated_claims,
-        nli_score=components["nli_score"],
-        ce_score=components["ce_score"],
-        entity_score=components["entity_score"],
-        q_relevance_score=components["q_relevance_score"],
-        authority_avg=components["authority_avg"],
-        support_ratio=components["support_ratio"],
-        diversity_score=components["diversity_score"],
-        contradiction_penalty=components["contradiction_penalty"],
+        has_false_hallucination=has_false_hallucination,
+        has_unverified_context=has_unverified_context,
+        logic_trace=logic_trace,
         supported_count=supported_count,
         contradicted_count=contradicted_count,
         insufficient_count=insufficient_count,

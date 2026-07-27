@@ -79,18 +79,11 @@ class VerificationResult:
     answer_entities: list[str] = field(default_factory=list)
     entity_drift_detected: bool = False
     
-    # Hallucination / Claim Relevance
-    has_hallucinated_claims: bool = False
-    
+    # Hallucination / Context Flags
+    has_false_hallucination: bool = False
+    has_unverified_context: bool = False
     # Component scores (for debugging / UI display)
-    nli_score: float = 0.0
-    ce_score: float = 0.0
-    entity_score: float = 0.0
-    q_relevance_score: float = 0.0
-    authority_avg: float = 0.0
-    support_ratio: float = 0.0
-    diversity_score: float = 0.0
-    contradiction_penalty: float = 0.0
+    logic_trace: list[str] = field(default_factory=list)
     
     # Aggregated counts
     supported_count: int = 0
