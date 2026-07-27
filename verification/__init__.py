@@ -136,7 +136,7 @@ def run_verification(
     # ------------------------------------------------------------------ #
     explanation = generate_explanation(
         label, verifications, evidence, components,
-        entity_drift_detected, has_hallucinated_claims
+        drift_detected, has_hallucinated_claims
     )
 
     # ------------------------------------------------------------------ #
