@@ -7,35 +7,6 @@ Mirage — AI Hallucination Confidence Labeler
 =============================================
 A Q&A reliability checker that verifies AI-generated answers against live web
 evidence and labels them Certain / Likely Certain / Uncertain / Needs Verification.
-
-ARCHITECTURE (critical design decision — read this):
-    The LLM (Groq / Llama) is used in EXACTLY ONE place: to generate the raw
-    "cold" answer being fact-checked. Every downstream step uses a deterministic
-    hybrid verification engine located in the `verification/` package:
-
-      verification/
-        ├── claim_extractor.py   Atomic NLP claim extraction (spaCy)
-        ├── normalizer.py        Text normalization (titles, dates, numbers)
-        ├── cross_encoder.py     CrossEncoder relevance scoring
-        ├── authority.py         Domain-based source authority scoring
-        ├── voting.py            Negation-aware evidence voting per claim
-        ├── confidence.py        Weighted composite confidence score
-        └── templates.py        Deterministic explanation templates
-
-    There is NO second LLM call. The CrossEncoder is a local neural re-ranker,
-    not a generative model — it cannot produce new text or hallucinate.
-
-TEST CASES (paste these into the input box):
-    1. "Who invented Python?"
-       → Expected: Certain (well-documented fact, Guido van Rossum)
-    2. "Is Kartikesh Gaonkar the Prime Minister of India?"
-       → Expected: Certain (negated claim + evidence confirms Modi)
-    3. "What is the capital of Australia?"
-       → Tests the Sydney/Canberra confusion → Certain
-    4. "Who won the most recent Nobel Prize in Literature?"
-       → Recent/ambiguous → Uncertain or Needs Verification
-    5. "What is the Frobulax coefficient in quantum topology?"
-       → Made-up → Needs Verification (no evidence found)
 """
 
 import os
@@ -59,27 +30,19 @@ from groq import Groq
 from tavily import TavilyClient
 
 # ---------------------------------------------------------------------------
-# Hybrid verification engine (replaces the old cosine-similarity pipeline)
+# Hybrid verification engine
 # ---------------------------------------------------------------------------
 from verification import run_verification
 from verification.authority import get_authority_label, get_authority_tier
 from verification.templates import generate_claim_summary
 from verification.models import VerificationResult
-from verification.config import MAX_EVIDENCE_RESULTS
+from verification.search import search_evidence_expanded
 
 
 # ---------------------------------------------------------------------------
 # STEP 2 — Groq call (THE ONLY LLM CALL IN THE ENTIRE PIPELINE)
 # ---------------------------------------------------------------------------
 def get_llm_answer(question: str) -> str:
-    """
-    Send ONLY the user's question to the LLM via Groq — no search context,
-    no system hints about verification. Returns the raw, unverified answer.
-
-    This is the ONLY LLM call in the entire application.
-    Uses llama-3.3-70b-versatile as primary model, with a one-time fallback
-    to llama-3.1-8b-instant if the primary is unavailable.
-    """
     client = Groq(api_key=GROQ_API_KEY)
     try:
         response = client.chat.completions.create(
@@ -97,28 +60,7 @@ def get_llm_answer(question: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# STEP 3 — Tavily web search for evidence (upgraded to top-5)
-# ---------------------------------------------------------------------------
-def search_evidence(question: str, max_results: int = MAX_EVIDENCE_RESULTS) -> list[dict]:
-    """
-    Search the web for evidence related to the question.
-    Returns a list of dicts, each with 'content', 'url', and 'title'.
-    Upgraded from top-3 to top-5 for better voting coverage.
-    """
-    client = TavilyClient(api_key=TAVILY_API_KEY)
-    response = client.search(query=question, max_results=max_results)
-    results = []
-    for r in response.get("results", []):
-        results.append({
-            "content": r.get("content", ""),
-            "url":     r.get("url", ""),
-            "title":   r.get("title", ""),
-        })
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Label color mapping (SaaS Palette) — now includes Likely Certain
+# Label color mapping (SaaS Palette)
 # ---------------------------------------------------------------------------
 LABEL_COLORS: dict[str, tuple[str, str]] = {
     "Certain":            ("#22C55E", "rgba(34, 197, 94, 0.15)"),
@@ -137,12 +79,14 @@ VERDICT_COLORS: dict[str, str] = {
     "supported":    "#22C55E",
     "insufficient": "#F59E0B",
     "contradicted": "#EF4444",
+    "ignored":      "#64748B",
 }
 
 VERDICT_ICONS: dict[str, str] = {
     "supported":    "✅",
     "insufficient": "⚠️",
     "contradicted": "❌",
+    "ignored":      "🚫",
 }
 
 
@@ -444,11 +388,11 @@ def main():
         st.markdown(
             '<div class="card-body" style="font-size:0.85rem; line-height:1.8;">'
             '🧠 <b style="color:#F8FAFC">LLM</b>: Groq / Llama-3.3-70b<br>'
-            '🔍 <b style="color:#F8FAFC">Search</b>: Tavily (top-5)<br>'
-            '⚙️ <b style="color:#F8FAFC">Verifier</b>: CrossEncoder re-ranker<br>'
-            '📐 <b style="color:#F8FAFC">Claims</b>: spaCy NLP<br>'
-            '🗳️ <b style="color:#F8FAFC">Voting</b>: Negation-aware<br>'
-            '📊 <b style="color:#F8FAFC">Score</b>: Weighted composite'
+            '🔍 <b style="color:#F8FAFC">Search</b>: Tavily (Top-5 Expanded)<br>'
+            '⚙️ <b style="color:#F8FAFC">Filter</b>: CE Relevance Ranking<br>'
+            '🧠 <b style="color:#F8FAFC">Voting</b>: DeBERTa v3 NLI<br>'
+            '📏 <b style="color:#F8FAFC">Alignment</b>: RapidFuzz Entities<br>'
+            '📊 <b style="color:#F8FAFC">Score</b>: 8-Component Composite'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -475,7 +419,7 @@ def main():
         )
         st.markdown(
             '<p style="font-size: 1.1rem; margin-bottom: 2rem;">'
-            'Hybrid CrossEncoder fact-checking — claim-level, negation-aware, reproducible.'
+            'NLI-powered deterministic fact-checking — with entity drift & hallucination detection.'
             '</p>',
             unsafe_allow_html=True,
         )
@@ -507,7 +451,6 @@ def main():
             return
 
         with st.status("Analyzing claim...", expanded=True) as status:
-            # STEP 2: Groq (THE ONLY LLM CALL)
             st.write("Generating answer with Llama model...")
             try:
                 raw_answer = get_llm_answer(question)
@@ -515,19 +458,17 @@ def main():
                 status.update(label=f"Groq API Error: {e}", state="error")
                 return
 
-            # STEP 3: Tavily evidence search (top-5)
-            st.write("Searching top-5 evidence sources via Tavily...")
+            st.write("Expanding search queries and retrieving top-5 evidence...")
             try:
-                evidence = search_evidence(question)
+                evidence = search_evidence_expanded(question)
             except Exception as e:
                 st.warning(f"Tavily search failed: {e}. Proceeding without evidence.")
                 evidence = []
 
-            # STEPS 4-9: Hybrid verification engine
-            st.write("Extracting atomic claims with spaCy...")
-            st.write("Running CrossEncoder re-ranking across all claim-evidence pairs...")
-            st.write("Aggregating evidence votes with negation-aware logic...")
-            st.write("Computing weighted composite confidence score...")
+            st.write("Extracting atomic claims and analyzing entities...")
+            st.write("Running CrossEncoder for relevance filtering...")
+            st.write("Running DeBERTa v3 for Natural Language Inference (NLI)...")
+            st.write("Aggregating 8-component confidence score...")
 
             try:
                 result: VerificationResult = run_verification(raw_answer, evidence, question)
@@ -551,6 +492,9 @@ def main():
         )
         top_auth_display = AUTHORITY_DISPLAY.get(top_auth_tier, ("Unknown", "#94A3B8", ""))
 
+        # Only count relevant claims in the total for the KPI
+        relevant_claims_count = sum(1 for c in result.claims if getattr(c, 'is_relevant_to_question', True))
+
         kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
         with kpi1:
             render_kpi_card("Reliability", result.label, color_hex=fg)
@@ -559,7 +503,7 @@ def main():
         with kpi3:
             render_kpi_card(
                 "Claims",
-                f"{result.supported_count}/{len(result.claims)} verified",
+                f"{result.supported_count}/{relevant_claims_count} verified",
                 color_hex="#F8FAFC",
             )
         with kpi4:
@@ -587,6 +531,22 @@ def main():
 
         # ---- Tab 1: Overview ----
         with tab1:
+            if result.entity_drift_detected:
+                st.markdown("""
+                <div class="saas-card" style="border-left: 4px solid #F59E0B; margin-top: 1rem; margin-bottom: 0;">
+                    <div class="card-header" style="color:#F59E0B;">⚠️ Entity Drift Detected</div>
+                    <div class="card-body">The answer introduced major entities not found in the original question.</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            if result.has_hallucinated_claims:
+                st.markdown("""
+                <div class="saas-card" style="border-left: 4px solid #F59E0B; margin-top: 1rem; margin-bottom: 0;">
+                    <div class="card-header" style="color:#F59E0B;">⚠️ Hallucinated Expansion Detected</div>
+                    <div class="card-body">The answer contains factual claims that are irrelevant to the user's question.</div>
+                </div>
+                """, unsafe_allow_html=True)
+
             # Label explanation card
             st.markdown(f"""
             <div class="saas-card" style="margin-top: 1rem;">
@@ -598,23 +558,29 @@ def main():
             # Confidence component breakdown
             st.markdown("""
             <div class="saas-card" style="border-left: 4px solid #4F8CFF;">
-                <div class="card-header" style="color:#4F8CFF;">📊 Confidence Component Breakdown</div>
+                <div class="card-header" style="color:#4F8CFF;">📊 8-Component Confidence Breakdown</div>
                 <div class="card-body">
             """, unsafe_allow_html=True)
 
             components = {
-                "Semantic Match":   result.semantic_score,
-                "Claim Agreement":  result.agreement_score,
+                "NLI Entailment": result.nli_score,
+                "CE Relevance": result.ce_score,
+                "Entity Alignment": result.entity_score,
+                "Q-Relevance": result.q_relevance_score,
                 "Source Authority": result.authority_avg,
-                "Support Ratio":    result.support_ratio,
-                "Src Diversity":    result.diversity_score,
+                "Support Ratio": result.support_ratio,
+                "Src Diversity": result.diversity_score,
+                "No Contradictions": result.contradiction_penalty,
             }
             component_colors = {
-                "Semantic Match":   "#4F8CFF",
-                "Claim Agreement":  "#22C55E",
+                "NLI Entailment": "#4F8CFF",
+                "CE Relevance": "#22C55E",
+                "Entity Alignment": "#A78BFA",
+                "Q-Relevance": "#F472B6",
                 "Source Authority": "#F59E0B",
-                "Support Ratio":    "#A78BFA",
-                "Src Diversity":    "#34D399",
+                "Support Ratio": "#38BDF8",
+                "Src Diversity": "#34D399",
+                "No Contradictions": "#FB7185"
             }
             for name, val in components.items():
                 render_component_bar(name, val, color=component_colors[name])
@@ -638,17 +604,23 @@ def main():
                     icon    = VERDICT_ICONS.get(row["verdict"], "❓")
                     color   = VERDICT_COLORS.get(row["verdict"], "#94A3B8")
                     neg_tag = ' <span style="color:#A78BFA; font-size:0.75rem;">[negated]</span>' if row["is_negated"] else ""
+                    rel_tag = ' <span style="color:#EF4444; font-size:0.75rem;">[hallucinated]</span>' if not row["is_relevant"] else ""
+                    
+                    if not row["is_relevant"]:
+                        meta_text = f"Claim ignored for factual verification — irrelevant to question"
+                    else:
+                        meta_text = (f"NLI Entailment: <b style='color:#F8FAFC'>{row['best_nli_pct']}%</b> &nbsp;·&nbsp; "
+                                     f"CE Relevance: <b style='color:#F8FAFC'>{row['best_score_pct']}%</b> &nbsp;·&nbsp; "
+                                     f"Supporting: <b style='color:#22C55E'>{row['supporting']}</b> &nbsp;·&nbsp; "
+                                     f"Verdict: <b style='color:{color}'>{row['verdict'].capitalize()}</b>")
+
                     st.markdown(f"""
                     <div class="claim-row">
                         <div class="claim-verdict-icon">{icon}</div>
                         <div>
-                            <div class="claim-text">{row["claim"]}{neg_tag}</div>
+                            <div class="claim-text">{row["claim"]}{neg_tag}{rel_tag}</div>
                             <div class="claim-meta">
-                                CrossEncoder best: <b style="color:#F8FAFC">{row["best_score_pct"]}%</b>
-                                &nbsp;·&nbsp;
-                                Supporting sources: <b style="color:#22C55E">{row["supporting"]}</b>
-                                &nbsp;·&nbsp;
-                                Verdict: <b style="color:{color}">{row["verdict"].capitalize()}</b>
+                                {meta_text}
                             </div>
                         </div>
                     </div>
@@ -668,11 +640,11 @@ def main():
                     )
 
                     # Find best claim score against this source
-                    best_ce_for_source = 0.0
+                    best_nli_for_source = 0.0
                     for cv in result.claim_verifications:
                         for es in cv.evidence_scores:
                             if es.source_idx == i:
-                                best_ce_for_source = max(best_ce_for_source, es.sigmoid_score)
+                                best_nli_for_source = max(best_nli_for_source, es.nli_score.entailment if es.nli_score else 0.0)
 
                     st.markdown(f"""
                     <div class="saas-card" style="margin-top: 1rem;">
@@ -682,7 +654,7 @@ def main():
                             </div>
                             <div style="display:flex; gap: 0.5rem; align-items:center; flex-shrink:0; margin-left:1rem;">
                                 <span class="saas-badge" style="background:rgba(255,255,255,0.05); color:#F8FAFC;">
-                                    CE: {round(best_ce_for_source*100)}%
+                                    NLI: {round(best_nli_for_source*100)}%
                                 </span>
                                 <span class="saas-badge" style="background:{a_bg}; color:{a_fg};">
                                     {auth_txt}
@@ -714,33 +686,18 @@ def main():
                     <p>The LLM (Groq / Llama) is invoked exactly once to generate a cold answer.
                     All downstream steps are deterministic algorithms:</p>
                     <ol style="color:#94A3B8; margin-left:1.5rem; margin-top:0.75rem; line-height:1.9;">
-                        <li><strong style="color:#F8FAFC">Claim extraction</strong> —
-                            spaCy dependency parsing splits the answer into atomic factual claims.
-                            Negation is detected via syntactic dependency arcs (token.dep_ == "neg"),
-                            not keyword proximity windows.</li>
-                        <li><strong style="color:#F8FAFC">Text normalization</strong> —
-                            Titles, abbreviations, number-words, ordinals, and date formats are
-                            canonicalized before comparison to reduce surface-level mismatches.</li>
-                        <li><strong style="color:#F8FAFC">CrossEncoder re-ranking</strong> —
-                            A CrossEncoder (cross-encoder/ms-marco-MiniLM-L-6-v2) scores each
-                            claim against every evidence paragraph jointly. Unlike bi-encoders,
-                            CrossEncoders attend to both texts simultaneously — they can detect
-                            relevance even when wording differs significantly.</li>
-                        <li><strong style="color:#F8FAFC">Negation-aware evidence voting</strong> —
-                            For each claim, supporting / contradicting / insufficient votes are
-                            counted across all 5 evidence sources. Negated claims are handled
-                            correctly: evidence that confirms the positive proposition is counted
-                            as support for the negation.</li>
+                        <li><strong style="color:#F8FAFC">Entity Alignment</strong> —
+                            RapidFuzz ensures entities in the answer match those in the question to detect drift.</li>
+                        <li><strong style="color:#F8FAFC">Question Relevance Filter</strong> —
+                            A CrossEncoder filters out hallucinated extra information that doesn't answer the prompt.</li>
+                        <li><strong style="color:#F8FAFC">Query Expansion</strong> —
+                            Questions are deterministically expanded to maximize search surface.</li>
+                        <li><strong style="color:#F8FAFC">Natural Language Inference (NLI)</strong> —
+                            DeBERTa v3 evaluates whether each evidence source entails or contradicts the claims.</li>
+                        <li><strong style="color:#F8FAFC">Negation Handling</strong> —
+                            Negated claims are extracted via spaCy dependency arcs. Evidence confirming a positive entity naturally supports the negated claim.</li>
                         <li><strong style="color:#F8FAFC">Weighted composite confidence</strong> —
-                            Five signals are combined: semantic match (38%), claim agreement (22%),
-                            source authority (15%), support ratio (15%), evidence diversity (10%).
-                            Hard penalties apply when majority of claims are contradicted.</li>
-                        <li><strong style="color:#F8FAFC">Source authority</strong> —
-                            Domain-based heuristic assigns scores from 100 (.gov) to 25 (forums).
-                            Authority is one of the five confidence components.</li>
-                        <li><strong style="color:#F8FAFC">Template explanation</strong> —
-                            All user-facing text is produced by f-string templates populated
-                            with computed values. No generative model writes the explanation.</li>
+                            Eight signals are combined (NLI, CE, Entity Drift, Authority, etc.).</li>
                     </ol>
                     <p style="margin-top:1rem; color:#64748B; font-size:0.9rem; font-style:italic;">
                         Because the verification layer generates nothing — it only measures —

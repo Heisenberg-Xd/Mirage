@@ -12,50 +12,56 @@ can be tuned in one place without touching pipeline logic.
 
 # CrossEncoder model for claim-vs-evidence relevance scoring.
 # ms-marco-MiniLM-L-6-v2: fast (~22MB), optimised for retrieval re-ranking.
-# Swap for "cross-encoder/nli-deberta-v3-base" for full NLI-style scoring
-# (3-way entail/neutral/contradict) at the cost of ~180MB and slower inference.
 CROSS_ENCODER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-# spaCy model for dependency parsing and NER during claim extraction.
+# NLI model for Entailment / Contradiction / Neutral prediction.
+# DeBERTa v3 zero-shot is a robust NLI classifier.
+NLI_MODEL: str = "cross-encoder/nli-deberta-v3-base"
+
+# spaCy model for dependency parsing and NER.
 SPACY_MODEL: str = "en_core_web_sm"
 
 # ---------------------------------------------------------------------------
 # Search parameters
 # ---------------------------------------------------------------------------
 
-# Number of Tavily evidence results to retrieve per query.
+# Number of Tavily evidence results to retrieve per query string.
+# (We might expand to multiple query strings and deduplicate down to MAX_EVIDENCE_RESULTS)
 MAX_EVIDENCE_RESULTS: int = 5
 
 # ---------------------------------------------------------------------------
-# Evidence voting thresholds
+# Entity Alignment & Relevance parameters
 # ---------------------------------------------------------------------------
 
-# CrossEncoder raw score (logit) above which an evidence item counts as
-# "supporting" a claim.  ms-marco logits are unbounded; empirically
-# scores > 5.0 indicate strong relevance.  We use a normalised [0,1]
-# sigmoid form internally, so these are the sigmoid-space thresholds.
-VOTE_SUPPORT_THRESHOLD: float = 0.65   # sigmoid(score) ≥ this → supported
-VOTE_CONTRADICTION_THRESHOLD: float = 0.30  # sigmoid(score) < this → potential contradiction
+# RapidFuzz similarity ratio [0, 100] above which two entities are considered matching.
+ENTITY_MATCH_THRESHOLD: float = 80.0
+
+# CrossEncoder relevance threshold above which a claim is considered "relevant"
+# to the user's question (to filter out hallucinated extra information).
+CLAIM_RELEVANCE_THRESHOLD: float = 0.50
 
 # ---------------------------------------------------------------------------
 # Composite confidence score weights
-# Must sum to 1.0
+# Must sum to 1.0 (100%)
 # ---------------------------------------------------------------------------
 CONFIDENCE_WEIGHTS: dict[str, float] = {
-    "semantic":      0.38,   # weighted-average best CrossEncoder score per claim
-    "agreement":     0.22,   # fraction of claims that are supported
-    "authority":     0.15,   # mean authority score of supporting sources
-    "support_ratio": 0.15,   # supported / (supported + contradicted)
-    "diversity":     0.10,   # unique supporting domains / total sources
+    "nli_entailment":  0.30,   # Strongest signal: NLI says it's true
+    "ce_relevance":    0.20,   # CrossEncoder relevance of evidence to claim
+    "entity_align":    0.15,   # Do answer entities match question entities?
+    "q_relevance":     0.10,   # Are the claims actually answering the question?
+    "authority":       0.10,   # Domain authority of supporting sources
+    "diversity":       0.05,   # Number of unique supporting domains
+    "support_ratio":   0.05,   # Ratio of supported vs contradicted claims
+    "contradiction":   0.05,   # Penalty weight (subtracted or used as inverse signal)
 }
 
 # ---------------------------------------------------------------------------
 # Label thresholds (applied to final 0–1 composite score)
 # ---------------------------------------------------------------------------
 LABEL_THRESHOLDS: dict[str, float] = {
-    "certain":        0.88,
-    "likely_certain": 0.68,
-    "uncertain":      0.46,
+    "certain":        0.95,
+    "likely_certain": 0.80,
+    "uncertain":      0.60,
     # below uncertain → "Needs Verification"
 }
 
