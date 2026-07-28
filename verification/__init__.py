@@ -59,13 +59,14 @@ def run_verification(
     if drift_detected:
         logger.warning(f"Entity Drift Detected! Q_entity: '{primary_q}', A_entity: '{primary_a}'")
         explanation = (
-            f"The model substituted the subject of the question and answered about a different entity "
-            f"('{primary_a}') instead of the one requested by the user ('{primary_q}')."
+            f"The model answered about a different entity ('{primary_a}') instead of the one "
+            f"requested by the user ('{primary_q}'). Hallucination status cannot be determined "
+            f"because the answer does not address the actual question."
         )
         return VerificationResult(
-            label="Needs Verification",
-            confidence_score=0.10,
-            confidence_pct=10,
+            label="Cannot Verify",
+            confidence_score=0.45,
+            confidence_pct=45,
             explanation=explanation,
             claims=[],
             claim_verifications=[],
@@ -76,7 +77,7 @@ def run_verification(
             primary_q_entity=primary_q,
             primary_a_entity=primary_a,
             entity_drift_detected=True,
-            logic_trace=["Entity drift detected → Pipeline short-circuited. Base: Needs Verification (10%)"]
+            logic_trace=["Entity drift detected → Pipeline short-circuited → Cannot Verify (45%)"]
         )
 
     # ------------------------------------------------------------------ #
@@ -205,12 +206,13 @@ def run_verification(
 
 def _empty_result(answer: str, evidence: list[dict]) -> VerificationResult:
     return VerificationResult(
-        label="Needs Verification",
-        confidence_score=0.0,
-        confidence_pct=0,
-        explanation="No verifiable factual claims could be extracted.",
+        label="Cannot Verify",
+        confidence_score=0.45,
+        confidence_pct=45,
+        explanation="No verifiable factual claims could be extracted from the answer. Hallucination status cannot be determined.",
         claims=[],
         claim_verifications=[],
         evidence=evidence,
         authority_scores=score_all_sources(evidence) if evidence else [],
+        logic_trace=["No claims extracted → Cannot Verify (45%)"]
     )
