@@ -4,11 +4,18 @@ verification/voting.py
 Evidence voting — aggregates per-source NLI scores into a
 per-claim verdict (supported / contradicted / insufficient).
 
+These verdicts feed the hallucination decision tree:
+  - supported    → evidence entails the claim
+  - contradicted → evidence contradicts the claim (→ Hallucinating if relevant)
+  - insufficient → no conclusive evidence either way (→ Cannot Verify)
+
 Key design decisions:
   1. We vote using DeBERTa v3 zero-shot NLI probabilities.
   2. A claim is 'supported' by a source if NLI entailment > 0.5.
   3. A claim is 'contradicted' by a source if NLI contradiction > 0.5.
   4. Otherwise 'insufficient'.
+  5. Only relevant claims (those that directly answer the question) are
+     used to determine the final hallucination label.
 """
 
 import logging
