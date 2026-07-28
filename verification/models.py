@@ -62,7 +62,14 @@ class ClaimVerification:
 @dataclass
 class VerificationResult:
     """
-    The complete output of the verification engine for one question.
+    The complete hallucination detection output for one question.
+
+    label is one of:
+      - "Not Hallucinating"  — all relevant claims supported by evidence
+      - "Cannot Verify"      — insufficient evidence to determine hallucination
+      - "Hallucinating"      — one or more relevant claims contradicted by evidence
+
+    confidence_score represents confidence IN the hallucination assessment (0–1).
     """
     label: str
     confidence_score: float
