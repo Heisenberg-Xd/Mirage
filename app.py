@@ -418,25 +418,25 @@ def main():
             )
             return
 
-        with st.status("Analyzing claim...", expanded=True) as status:
-            st.write("Generating answer with Llama model...")
+        with st.status("Detecting hallucination...", expanded=True) as status:
+            st.write("🧠 Generating answer with Llama model...")
             try:
                 raw_answer = get_llm_answer(question)
             except Exception as e:
                 status.update(label=f"Groq API Error: {e}", state="error")
                 return
 
-            st.write("Expanding search queries and retrieving top-5 evidence...")
+            st.write("🔍 Retrieving live evidence from the web...")
             try:
                 evidence = search_evidence_expanded(question)
             except Exception as e:
                 st.warning(f"Tavily search failed: {e}. Proceeding without evidence.")
                 evidence = []
 
-            st.write("Extracting atomic claims and analyzing entities...")
-            st.write("Running CrossEncoder for relevance filtering...")
-            st.write("Running DeBERTa v3 for Natural Language Inference (NLI)...")
-            st.write("Executing rule-based confidence scoring...")
+            st.write("🔬 Extracting relevant claims from the answer...")
+            st.write("📊 Filtering to claims that directly answer the question...")
+            st.write("⚖️ Running DeBERTa v3 NLI to detect contradictions...")
+            st.write("🎯 Determining hallucination status...")
 
             try:
                 result: VerificationResult = run_verification(raw_answer, evidence, question)
@@ -445,7 +445,7 @@ def main():
                 st.exception(e)
                 return
 
-            status.update(label="Analysis complete", state="complete", expanded=False)
+            status.update(label=f"Hallucination detection complete — {result.label}", state="complete", expanded=False)
 
         # -------------------------------------------------------------------
         # DISPLAY DASHBOARD RESULTS
