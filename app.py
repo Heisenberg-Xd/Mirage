@@ -3,10 +3,10 @@
 # Running it directly causes ScriptRunContext warnings and broken session state.
 
 """
-Mirage — AI Hallucination Confidence Labeler
-=============================================
-A Q&A reliability checker that verifies AI-generated answers against live web
-evidence and labels them Certain / Likely Certain / Uncertain / Needs Verification.
+Mirage — AI Hallucination Detector
+====================================
+A Q&A hallucination checker that verifies AI-generated answers against live
+web evidence and labels them Not Hallucinating / Cannot Verify / Hallucinating.
 """
 
 import os
@@ -62,11 +62,11 @@ def get_llm_answer(question: str) -> str:
 # ---------------------------------------------------------------------------
 # Label color mapping (SaaS Palette)
 # ---------------------------------------------------------------------------
+# Label color mapping — 3-state hallucination palette
 LABEL_COLORS: dict[str, tuple[str, str]] = {
-    "Certain":            ("#22C55E", "rgba(34, 197, 94, 0.15)"),
-    "Likely Certain":     ("#4F8CFF", "rgba(79, 140, 255, 0.15)"),
-    "Uncertain":          ("#F59E0B", "rgba(245, 158, 11, 0.15)"),
-    "Needs Verification": ("#EF4444", "rgba(239, 68, 68, 0.15)"),
+    "Not Hallucinating": ("#22C55E", "rgba(34, 197, 94, 0.15)"),
+    "Cannot Verify":     ("#F59E0B", "rgba(245, 158, 11, 0.15)"),
+    "Hallucinating":     ("#EF4444", "rgba(239, 68, 68, 0.15)"),
 }
 
 AUTHORITY_DISPLAY: dict[str, tuple[str, str, str]] = {
@@ -335,8 +335,8 @@ def render_saas_card(title: str, content: str, icon: str = ""):
 # ===========================================================================
 def main():
     st.set_page_config(
-        page_title="Mirage — AI Confidence Dashboard",
-        page_icon="⚡",
+        page_title="Mirage — AI Hallucination Detector",
+        page_icon="🔍",
         layout="wide",
         initial_sidebar_state="expanded",
     )
@@ -345,9 +345,9 @@ def main():
 
     # --- Sidebar ---
     with st.sidebar:
-        st.markdown("<h1>⚡ Mirage Labeler</h1>", unsafe_allow_html=True)
+        st.markdown("<h1>🔍 Mirage Detector</h1>", unsafe_allow_html=True)
         st.markdown(
-            "Hybrid deterministic fact-checking engine. "
+            "Hybrid deterministic hallucination detector. "
             "One LLM call. Zero LLM verification."
         )
 
@@ -360,7 +360,7 @@ def main():
             '⚙️ <b style="color:#F8FAFC">Filter</b>: CE Relevance Ranking<br>'
             '🧠 <b style="color:#F8FAFC">Voting</b>: DeBERTa v3 NLI<br>'
             '📏 <b style="color:#F8FAFC">Alignment</b>: RapidFuzz Entities<br>'
-            '📊 <b style="color:#F8FAFC">Score</b>: Strict Rule-Based Logic'
+            '🎯 <b style="color:#F8FAFC">Output</b>: Hallucination Status'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -382,12 +382,12 @@ def main():
     col1, col2 = st.columns([3, 1])
     with col1:
         st.markdown(
-            '<h1 style="margin-bottom:0.5rem; font-size: 2.2rem;">Verification Dashboard</h1>',
+            '<h1 style="margin-bottom:0.5rem; font-size: 2.2rem;">Hallucination Detection Dashboard</h1>',
             unsafe_allow_html=True,
         )
         st.markdown(
             '<p style="font-size: 1.1rem; margin-bottom: 2rem;">'
-            'NLI-powered deterministic fact-checking — with entity drift & hallucination detection.'
+            'NLI-powered deterministic hallucination detection — Not Hallucinating / Cannot Verify / Hallucinating.'
             '</p>',
             unsafe_allow_html=True,
         )
@@ -405,7 +405,7 @@ def main():
 
     col_btn, _ = st.columns([1, 4])
     with col_btn:
-        check_btn = st.button("Run Verification", type="primary", use_container_width=True)
+        check_btn = st.button("Detect Hallucination", type="primary", use_container_width=True)
 
     # -----------------------------------------------------------------------
     # Main Pipeline
@@ -465,7 +465,7 @@ def main():
 
         kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
         with kpi1:
-            render_kpi_card("Reliability", result.label, color_hex=fg)
+            render_kpi_card("Hallucination Status", result.label, color_hex=fg)
         with kpi2:
             render_kpi_card("Confidence", f"{result.confidence_pct}%", color_hex=fg)
         with kpi3:
@@ -531,26 +531,25 @@ def main():
             </div>
             """, unsafe_allow_html=True)
 
-            # ------ Other Warnings ------
+            # ------ Other Status Cards ------
             if not drift and getattr(result, "has_false_hallucination", False):
                 st.markdown("""
-                <div class="saas-card" style="border-left: 4px solid #EF4444; margin-top: 1rem; margin-bottom: 0;">
-                    <div class="card-header" style="color:#EF4444;">⚠️ Hallucination Warning</div>
-                    <div class="card-body">The answer introduced an additional factual claim that is explicitly contradicted by evidence. Confidence has been penalized.</div>
+                <div class="saas-card" style="border-left: 4px solid #F59E0B; margin-top: 1rem; margin-bottom: 0;">
+                    <div class="card-header" style="color:#F59E0B;">ℹ️ Filler Content Contradicted</div>
+                    <div class="card-body">The answer contains additional conversational content (not the direct answer) that is contradicted by evidence. This does not count as hallucination since it does not answer the user's question, but should be noted.</div>
                 </div>
                 """, unsafe_allow_html=True)
             elif not drift and getattr(result, "has_unverified_context", False):
                 st.markdown("""
-                <div class="saas-card" style="border-left: 4px solid #F59E0B; margin-top: 1rem; margin-bottom: 0;">
-                    <div class="card-header" style="color:#F59E0B;">ℹ️ Unverified Additional Information</div>
-                    <div class="card-body">The answer contains extra information not directly related to your question that could not be verified. This does not affect confidence, but should be treated with caution.</div>
+                <div class="saas-card" style="border-left: 4px solid #64748B; margin-top: 1rem; margin-bottom: 0;">
+                    <div class="card-header" style="color:#94A3B8;">ℹ️ Additional Unverified Context</div>
+                    <div class="card-body">The answer contains extra information not directly answering your question that could not be verified. This does not affect the hallucination status.</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            # Label explanation card
             st.markdown(f"""
             <div class="saas-card" style="margin-top: 1rem;">
-                <div class="card-header">ℹ️ Verification Summary</div>
+                <div class="card-header">🎯 Hallucination Assessment Summary</div>
                 <div class="card-body" style="color:#F8FAFC;">{result.explanation}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -653,33 +652,34 @@ def main():
             else:
                 st.info("No web evidence found.")
 
-        # ---- Tab 4: How it Works ----
         with tab4:
             st.markdown("""
             <div class="saas-card" style="margin-top: 1rem;">
                 <div class="card-body">
                     <p style="color:#F8FAFC; font-weight:600; font-size:1.05rem; margin-bottom:1rem;">
-                        One LLM call. Zero LLM verification. Fully deterministic.
+                        One LLM call. Zero LLM verification. Fully deterministic hallucination detection.
                     </p>
                     <p>The LLM (Groq / Llama) is invoked exactly once to generate a cold answer.
-                    All downstream steps are deterministic algorithms:</p>
+                    All downstream hallucination checks are deterministic algorithms:</p>
                     <ol style="color:#94A3B8; margin-left:1.5rem; margin-top:0.75rem; line-height:1.9;">
                         <li><strong style="color:#F8FAFC">Entity Alignment</strong> —
-                            RapidFuzz ensures entities in the answer match those in the question to detect drift.</li>
+                            RapidFuzz ensures the answer addresses the same subject as the question. Entity drift → Cannot Verify.</li>
                         <li><strong style="color:#F8FAFC">Question Relevance Filter</strong> —
-                            A CrossEncoder filters out conversational filler and additional context that doesn't strictly answer the prompt.</li>
-                        <li><strong style="color:#F8FAFC">Query Expansion</strong> —
-                            Questions are deterministically expanded to maximize search surface.</li>
+                            A CrossEncoder isolates claims that directly answer the question. Conversational filler is excluded unless it introduces a contradictory fact.</li>
+                        <li><strong style="color:#F8FAFC">Query Expansion & Evidence Retrieval</strong> —
+                            Queries are expanded and Tavily retrieves up to 5 live sources.</li>
                         <li><strong style="color:#F8FAFC">Natural Language Inference (NLI)</strong> —
-                            DeBERTa v3 evaluates whether each evidence source entails or contradicts the claims.</li>
-                        <li><strong style="color:#F8FAFC">Negation Handling</strong> —
-                            Negated claims are extracted via spaCy dependency arcs. Evidence confirming a positive entity naturally supports the negated claim.</li>
-                        <li><strong style="color:#F8FAFC">Strict Rule-Based Logic</strong> —
-                            Confidence and labels are determined purely by whether the *relevant* claims are supported. Penalties only apply for explicit false information.</li>
+                            DeBERTa v3 determines whether each evidence source entails or contradicts each relevant claim.</li>
+                        <li><strong style="color:#F8FAFC">Hallucination Decision</strong> —
+                            Any contradicted relevant claim → <span style="color:#EF4444">Hallucinating</span>.
+                            All claims supported → <span style="color:#22C55E">Not Hallucinating</span>.
+                            Insufficient evidence → <span style="color:#F59E0B">Cannot Verify</span>.</li>
+                        <li><strong style="color:#F8FAFC">Confidence Score</strong> —
+                            Represents confidence <em>in the hallucination assessment</em>, not in the answer quality.</li>
                     </ol>
                     <p style="margin-top:1rem; color:#64748B; font-size:0.9rem; font-style:italic;">
                         Because the verification layer generates nothing — it only measures —
-                        it cannot hallucinate. Every confidence score is reproducible.
+                        it cannot hallucinate. Every hallucination score is reproducible.
                     </p>
                 </div>
             </div>
