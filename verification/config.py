@@ -56,19 +56,21 @@ CONFIDENCE_WEIGHTS: dict[str, float] = {
 }
 
 # ---------------------------------------------------------------------------
-# Label thresholds (applied to final 0–1 composite score)
+# Hallucination Detection Label thresholds
 # ---------------------------------------------------------------------------
+# Confidence score represents confidence IN the hallucination assessment.
+# Not Hallucinating → all relevant claims supported  → score 95–100%
+# Cannot Verify     → insufficient evidence          → score 40–60%
+# Hallucinating     → any relevant claim contradicted→ score 10–30%
 LABEL_THRESHOLDS: dict[str, float] = {
-    "certain":        0.95,
-    "likely_certain": 0.80,
-    "uncertain":      0.60,
-    # below uncertain → "Needs Verification"
+    "not_hallucinating": 0.95,   # all relevant claims supported
+    "cannot_verify":     0.40,   # insufficient evidence to confirm or deny
+    "hallucinating":     0.20,   # relevant claim(s) contradicted by evidence
 }
 
 # Human-readable label strings
 LABEL_STRINGS: dict[str, str] = {
-    "certain":        "Certain",
-    "likely_certain": "Likely Certain",
-    "uncertain":      "Uncertain",
-    "needs_verification": "Needs Verification",
+    "not_hallucinating": "Not Hallucinating",
+    "hallucinating":     "Hallucinating",
+    "cannot_verify":     "Cannot Verify",
 }
