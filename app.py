@@ -452,6 +452,35 @@ def main():
         # -------------------------------------------------------------------
         st.markdown("<br>", unsafe_allow_html=True)
 
+        # Hallucination status icons
+        HAL_ICONS: dict[str, str] = {
+            "Not Hallucinating": "✅",
+            "Cannot Verify":     "⚠️",
+            "Hallucinating":     "❌",
+        }
+        hal_icon = HAL_ICONS.get(result.label, "❓")
+
+        # Hero hallucination banner
+        st.markdown(f"""
+        <div style="background:{bg}; border:2px solid {fg}; border-radius:16px;
+             padding:1.5rem 2rem; margin-bottom:1.5rem;
+             display:flex; align-items:center; gap:1rem;">
+            <span style="font-size:2.5rem;">{hal_icon}</span>
+            <div>
+                <div style="font-size:0.8rem; color:{fg}; font-weight:700;
+                     text-transform:uppercase; letter-spacing:0.1em;">
+                    Hallucination Assessment
+                </div>
+                <div style="font-size:2rem; font-weight:800; color:{fg}; line-height:1.2;">
+                    {result.label}
+                </div>
+                <div style="font-size:0.9rem; color:#94A3B8; margin-top:0.25rem;">
+                    Confidence in assessment: <b style="color:{fg}">{result.confidence_pct}%</b>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
         # KPI Row — 5 cards
         fg, bg = LABEL_COLORS.get(result.label, ("#94A3B8", "transparent"))
         top_url = result.evidence[0]["url"] if result.evidence else ""
@@ -488,6 +517,7 @@ def main():
             )
 
         st.markdown("<br>", unsafe_allow_html=True)
+
 
         # Generated answer card
         render_saas_card("Generated Answer", raw_answer, icon="🤖")
