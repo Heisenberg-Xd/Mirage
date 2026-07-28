@@ -1,20 +1,20 @@
 """
 verification/__init__.py
 ========================
-Public API for the hybrid deterministic fact verification engine.
+Public API for the hybrid deterministic hallucination detection engine.
 
 Pipeline order:
     1. Question Analysis & Entity Extraction
-    2. Answer Entity Extraction & Alignment (Entity Drift Check)
+    2. Answer Entity Extraction & Alignment (Entity Drift → Cannot Verify)
     3. Claim extraction
-    4. Claim filtering (relevance to question)
+    4. Claim filtering — keep only claims that directly answer the question
     5. Authority scoring
     6. CrossEncoder scoring (relevance)
-    7. NLI scoring (entailment/contradiction)
+    7. NLI scoring (entailment/contradiction per claim)
     8. Evidence voting
-    9. Confidence scoring
+    9. Hallucination confidence scoring
     10. Explanation template
-    → VerificationResult
+    → VerificationResult  (label: Not Hallucinating / Cannot Verify / Hallucinating)
 """
 
 import logging
