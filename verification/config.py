@@ -17,6 +17,7 @@ CROSS_ENCODER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 # NLI model for Entailment / Contradiction / Neutral prediction.
 # DeBERTa v3 zero-shot is a robust NLI classifier.
+# Default voting thresholds: relevance >= 0.60, NLI confidence >= 0.70, margin = 0.15
 NLI_MODEL: str = "cross-encoder/nli-deberta-v3-base"
 
 # spaCy model for dependency parsing and NER.
