@@ -452,6 +452,9 @@ def main():
         # -------------------------------------------------------------------
         st.markdown("<br>", unsafe_allow_html=True)
 
+        # Get colors for the result label
+        fg, bg = LABEL_COLORS.get(result.label, ("#94A3B8", "transparent"))
+
         # Hallucination status icons
         HAL_ICONS: dict[str, str] = {
             "Not Hallucinating": "✅",
@@ -482,7 +485,6 @@ def main():
         """, unsafe_allow_html=True)
 
         # KPI Row — 5 cards
-        fg, bg = LABEL_COLORS.get(result.label, ("#94A3B8", "transparent"))
         top_url = result.evidence[0]["url"] if result.evidence else ""
         top_auth_tier = get_authority_tier(
             result.authority_scores[0] if result.authority_scores else 0.5
