@@ -147,7 +147,7 @@ def run_verification(
     # Step 8: Evidence voting per claim (using NLI)
     # ------------------------------------------------------------------ #
     verifications: list[ClaimVerification] = vote_all_claims(
-        claims, evidence, all_ce_scores, all_nli_scores
+        claims, evidence, all_ce_scores, all_nli_scores, authority_scores
     )
 
     # ------------------------------------------------------------------ #
