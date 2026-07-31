@@ -104,6 +104,7 @@ def vote_on_claim(
         support_contrib = rel_score * nli.entailment * auth
         contradiction_contrib = rel_score * nli.contradiction * auth
         
+        # Accumulate total support score for the claim
         support_score += support_contrib
         contradiction_score += contradiction_contrib
 
