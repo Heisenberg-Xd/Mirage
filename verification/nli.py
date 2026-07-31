@@ -45,7 +45,7 @@ def score_nli(claim_text: str, evidence_paragraphs: list[str], model) -> list[NL
     if not evidence_paragraphs:
         return []
         
-    pairs = [(claim_text, para) for para in evidence_paragraphs]
+    pairs = [(para, claim_text) for para in evidence_paragraphs]
     
     try:
         raw_scores = model.predict(pairs, show_progress_bar=False)
@@ -75,7 +75,7 @@ def score_all_nli(claims_texts: list[str], evidence_paragraphs: list[str], model
     all_pairs = []
     for ct in claims_texts:
         for para in evidence_paragraphs:
-            all_pairs.append((ct, para))
+            all_pairs.append((para, ct))
             
     try:
         raw_scores = model.predict(all_pairs, show_progress_bar=False)
