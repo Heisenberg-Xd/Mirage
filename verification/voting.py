@@ -106,6 +106,7 @@ def vote_on_claim(
         
         # Accumulate total support score for the claim
         support_score += support_contrib
+        # Accumulate total contradiction score for the claim
         contradiction_score += contradiction_contrib
 
         # Determine individual evidence verdict for logging/display
