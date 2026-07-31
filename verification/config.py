@@ -4,6 +4,7 @@ verification/config.py
 Central configuration for the hybrid verification engine.
 All weights, thresholds, and model names are defined here so they
 can be tuned in one place without touching pipeline logic.
+Includes support for evidence authority weighting and confidence margins.
 """
 
 # ---------------------------------------------------------------------------
