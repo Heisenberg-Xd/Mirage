@@ -49,9 +49,11 @@ def vote_on_claim(
     evidence_list: list[dict],
     relevance_scores_for_claim: list[float],
     nli_scores_for_claim: list[NLIScore],
+    authority_scores: list[float],
 ) -> ClaimVerification:
     """
-    Aggregate evidence votes for a single claim using NLI probabilities.
+    Aggregate evidence votes for a single claim using NLI probabilities, 
+    CrossEncoder relevance, and Authority Scores.
     """
     evidence_scores: list[EvidenceScore] = []
     supporting_count = 0
@@ -62,24 +64,62 @@ def vote_on_claim(
     best_entailment = 0.0
     best_source_idx = 0
 
-    for i, (source, rel_score, nli) in enumerate(zip(evidence_list, relevance_scores_for_claim, nli_scores_for_claim)):
+    support_score = 0.0
+    contradiction_score = 0.0
+    
+    MIN_RELEVANCE = 0.60
+    MIN_NLI_CONFIDENCE = 0.70
+
+    for i, (source, rel_score, nli, auth) in enumerate(zip(evidence_list, relevance_scores_for_claim, nli_scores_for_claim, authority_scores)):
         
-        # Determine verdict using NLI probabilities
-        if nli.entailment > 0.5:
+        url = source.get("url", "unknown")
+        snippet = source.get("content", "")[:100].replace("\n", " ") + "..."
+
+        # Ignore unrelated evidence
+        if rel_score < MIN_RELEVANCE:
+            evidence_scores.append(EvidenceScore(
+                source_idx=i,
+                raw_relevance_score=rel_score,
+                sigmoid_relevance_score=rel_score,
+                nli_score=nli,
+                verdict="ignored",
+            ))
+            logger.info(f"Claim: '{claim.raw_text}' | CE: {rel_score:.2f} | Ent: {nli.entailment:.2f} | Cont: {nli.contradiction:.2f} | Neut: {nli.neutral:.2f} | URL: {url} | Snippet: {snippet} | Verdict: IGNORED (Low Relevance)")
+            continue
+            
+        # Ignore uncertain NLI predictions
+        if max(nli.entailment, nli.contradiction) < MIN_NLI_CONFIDENCE:
+            evidence_scores.append(EvidenceScore(
+                source_idx=i,
+                raw_relevance_score=rel_score,
+                sigmoid_relevance_score=rel_score,
+                nli_score=nli,
+                verdict="insufficient",
+            ))
+            logger.info(f"Claim: '{claim.raw_text}' | CE: {rel_score:.2f} | Ent: {nli.entailment:.2f} | Cont: {nli.contradiction:.2f} | Neut: {nli.neutral:.2f} | URL: {url} | Snippet: {snippet} | Verdict: INSUFFICIENT (NLI Uncertain)")
+            insufficient_count += 1
+            continue
+
+        # Calculate contributions
+        support_contrib = rel_score * nli.entailment * auth
+        contradiction_contrib = rel_score * nli.contradiction * auth
+        
+        support_score += support_contrib
+        contradiction_score += contradiction_contrib
+
+        # Determine individual evidence verdict for logging/display
+        if nli.entailment > nli.contradiction:
             verdict = "supported"
             supporting_count += 1
-        elif nli.contradiction > 0.5:
+        else:
             verdict = "contradicted"
             contradicting_count += 1
-        else:
-            verdict = "insufficient"
-            insufficient_count += 1
-
+            
         if rel_score > best_relevance:
             best_relevance = rel_score
             
-        if nli.entailment > best_entailment:
-            best_entailment = nli.entailment
+        if support_contrib > best_entailment: # Tracking highest weighted supporting source
+            best_entailment = support_contrib
             best_source_idx = i
 
         evidence_scores.append(EvidenceScore(
@@ -89,13 +129,14 @@ def vote_on_claim(
             nli_score=nli,
             verdict=verdict,
         ))
+        
+        logger.info(f"Claim: '{claim.raw_text}' | CE: {rel_score:.2f} | Ent: {nli.entailment:.2f} | Cont: {nli.contradiction:.2f} | Neut: {nli.neutral:.2f} | URL: {url} | Snippet: {snippet} | Verdict: {verdict.upper()}")
 
-    # Overall claim verdict
-    if supporting_count >= 1:
-        # If at least one source firmly entails it, we consider the claim supported.
-        # (This is more robust than majority voting when evidence might just be unrelated paragraphs)
+    # Aggregate claim verdict with margin
+    margin = 0.15
+    if support_score > contradiction_score + margin:
         overall_verdict = "supported"
-    elif contradicting_count > 0:
+    elif contradiction_score > support_score + margin:
         overall_verdict = "contradicted"
     else:
         overall_verdict = "insufficient"
@@ -107,7 +148,7 @@ def vote_on_claim(
         contradicting_count=contradicting_count,
         insufficient_count=insufficient_count,
         best_relevance_score=best_relevance,
-        best_nli_entailment=best_entailment,
+        best_nli_entailment=best_entailment,  # Represents best support contribution
         best_source_idx=best_source_idx,
         evidence_scores=evidence_scores,
     )
@@ -118,23 +159,35 @@ def vote_all_claims(
     evidence_list: list[dict],
     all_relevance_scores: list[list[float]],
     all_nli_scores: list[list[NLIScore]],
+    authority_scores: list[float],
 ) -> list[ClaimVerification]:
     """
     Run NLI voting for every claim.
     """
     verifications: list[ClaimVerification] = []
     
+    # Ensure authority scores list matches evidence list length
+    if not authority_scores:
+        authority_scores = [0.5] * len(evidence_list)
+    elif len(authority_scores) < len(evidence_list):
+        authority_scores.extend([0.5] * (len(evidence_list) - len(authority_scores)))
+    
+    logger.info("==================================================")
+    logger.info("VERIFICATION LOG")
+    logger.info("==================================================")
+    
     for i, claim in enumerate(claims):
         rel_scores = all_relevance_scores[i] if i < len(all_relevance_scores) else [0.0] * len(evidence_list)
         nli_scores = all_nli_scores[i] if i < len(all_nli_scores) else [NLIScore(0.0,0.0,1.0) for _ in evidence_list]
         
-        cv = vote_on_claim(claim, evidence_list, rel_scores, nli_scores)
+        cv = vote_on_claim(claim, evidence_list, rel_scores, nli_scores, authority_scores)
         verifications.append(cv)
         
-        logger.debug(
-            f"Claim [{i}] '{claim.raw_text[:60]}' → {cv.verdict} "
-            f"(support={cv.supporting_count}, best_entailment={cv.best_nli_entailment:.3f})"
-        )
+        logger.info(f"Final Verdict for Claim [{i}]: {cv.verdict.upper()} (Support: {cv.supporting_count}, Contradict: {cv.contradicting_count})")
+        logger.info("---------------------------------")
+        
+    logger.info("==================================================")
+        
     return verifications
 
 
