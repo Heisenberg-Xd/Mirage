@@ -100,7 +100,7 @@ def vote_on_claim(
             insufficient_count += 1
             continue
 
-        # Calculate contributions
+        # Calculate contributions using relevance, nli entailment/contradiction, and source authority
         support_contrib = rel_score * nli.entailment * auth
         contradiction_contrib = rel_score * nli.contradiction * auth
         
