@@ -174,6 +174,7 @@ def vote_all_claims(
     elif len(authority_scores) < len(evidence_list):
         authority_scores.extend([0.5] * (len(evidence_list) - len(authority_scores)))
     
+    # Log detailed claim evaluation trace for debugging
     logger.info("==================================================")
     logger.info("VERIFICATION LOG")
     logger.info("==================================================")
