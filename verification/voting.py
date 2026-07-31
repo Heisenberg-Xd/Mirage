@@ -68,7 +68,7 @@ def vote_on_claim(
     contradiction_score = 0.0
     
     MIN_RELEVANCE = 0.60
-    MIN_NLI_CONFIDENCE = 0.70
+    MIN_NLI_CONFIDENCE = 0.70  # Ignore predictions where model confidence is below 70%
 
     for i, (source, rel_score, nli, auth) in enumerate(zip(evidence_list, relevance_scores_for_claim, nli_scores_for_claim, authority_scores)):
         
