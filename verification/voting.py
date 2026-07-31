@@ -134,7 +134,7 @@ def vote_on_claim(
         
         logger.info(f"Claim: '{claim.raw_text}' | CE: {rel_score:.2f} | Ent: {nli.entailment:.2f} | Cont: {nli.contradiction:.2f} | Neut: {nli.neutral:.2f} | URL: {url} | Snippet: {snippet} | Verdict: {verdict.upper()}")
 
-    # Aggregate claim verdict with margin
+    # Aggregate claim verdict with 0.15 margin to avoid false positives
     margin = 0.15
     if support_score > contradiction_score + margin:
         overall_verdict = "supported"
