@@ -21,3 +21,6 @@ requests
 beautifulsoup4
 
 lxml
+
+spacy
+streamlit
