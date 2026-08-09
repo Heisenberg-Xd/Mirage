@@ -23,10 +23,10 @@ given fixed weights and inputs.
 
 import logging
 import math
+import functools
 from typing import Optional
 
 import numpy as np
-import streamlit as st
 
 from .config import CROSS_ENCODER_MODEL
 
@@ -47,10 +47,10 @@ def _sigmoid(x: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Model loading — cached for the entire Streamlit session
+# Model loading — cached for the entire process lifetime
 # ---------------------------------------------------------------------------
 
-@st.cache_resource(show_spinner="Loading CrossEncoder model (one-time)…")
+@functools.lru_cache(maxsize=None)
 def load_cross_encoder():
     """
     Load the CrossEncoder model from HuggingFace Hub and cache it.

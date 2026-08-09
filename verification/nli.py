@@ -6,14 +6,14 @@ Predicts Entailment, Contradiction, or Neutral for a (Claim, Evidence) pair.
 """
 
 import logging
+import functools
 import numpy as np
-import streamlit as st
 from .config import NLI_MODEL
 from .models import NLIScore
 
 logger = logging.getLogger(__name__)
 
-@st.cache_resource(show_spinner="Loading NLI DeBERTa model (one-time)…")
+@functools.lru_cache(maxsize=None)
 def load_nli_model():
     """
     Load the NLI CrossEncoder model.

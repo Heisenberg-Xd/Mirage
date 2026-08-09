@@ -22,9 +22,8 @@ Design:
 
 import re
 import logging
+import functools
 from typing import Optional
-
-import streamlit as st
 
 from .models import Claim
 from .normalizer import normalize
@@ -35,7 +34,7 @@ logger = logging.getLogger(__name__)
 # spaCy model — loaded once and cached
 # ---------------------------------------------------------------------------
 
-@st.cache_resource(show_spinner="Loading NLP claim extractor (one-time)…")
+@functools.lru_cache(maxsize=None)
 def _load_spacy():
     """Load and cache the spaCy model. Called once at startup."""
     try:

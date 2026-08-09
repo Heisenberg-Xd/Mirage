@@ -5,9 +5,9 @@ Wraps spaCy NER to extract entities from questions and answers.
 """
 
 import spacy
-import streamlit as st
+import functools
 
-@st.cache_resource(show_spinner="Loading NLP NER model (one-time)…")
+@functools.lru_cache(maxsize=None)
 def get_spacy_model():
     return spacy.load("en_core_web_sm")
 
