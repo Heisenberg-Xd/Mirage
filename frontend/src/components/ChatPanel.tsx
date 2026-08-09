@@ -185,7 +185,7 @@ export default function ChatPanel({
 
                     {msg.status === 'loading' && (
                       <span className="flex items-center gap-1 ml-2 text-xs font-medium text-gray-500 animate-pulse">
-                        Verifying...
+                        {msg.loadingMessage || 'Verifying...'}
                       </span>
                     )}
                   </div>

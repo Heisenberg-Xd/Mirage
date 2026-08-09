@@ -123,5 +123,6 @@ export interface ConversationMessage {
   result: VerificationResult | null; // null while loading
   status: 'loading' | 'complete' | 'error';
   errorMessage?: string;
+  loadingMessage?: string;
   timestamp: Date;
 }

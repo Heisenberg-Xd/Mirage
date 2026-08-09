@@ -42,15 +42,34 @@ from verification.search import search_evidence_expanded
 # ----------------------------
 app = FastAPI(title="Mirage Verification API", version="1.0.0")
 
+
 # ----------------------------
 # CORS – dev only
 # ----------------------------
+# ----------------------------
+# CORS
+# Supports:
+# - Local development
+# - Production (Vercel)
+# - Future Vercel preview deployments
+# ----------------------------
+
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+
+    # Production frontend
+    "https://mirage-one-psi.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # ----------------------------

@@ -69,7 +69,18 @@ export default function Workspace({
     setSelectedMessageId(newMessageId);
 
     try {
-      const data = await verifyAnswer(text);
+      const data = await verifyAnswer(text, {
+        onRetry: () => {
+          // If we retry, it's likely because Render was asleep and returning 502/503.
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === newMessageId
+                ? { ...msg, loadingMessage: 'Waking up the verification engine...' }
+                : msg
+            )
+          );
+        },
+      });
       // Update only this specific message by ID — never replace the array.
       setMessages((prev) =>
         prev.map((msg) =>
