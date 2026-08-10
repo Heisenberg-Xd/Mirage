@@ -1,26 +1,27 @@
-fastapi
-uvicorn
-python-dotenv
+# ── Web server ────────────────────────────────────────────────────────────────
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+python-dotenv==1.1.0
+pydantic==2.11.7
 
-groq
+# ── LLM / Search ─────────────────────────────────────────────────────────────
+groq==0.29.0
+tavily-python==0.5.1
 
-tavily-python
+# ── ML / NLP ─────────────────────────────────────────────────────────────────
+# NOTE: torch (CPU-only) is installed first by render.yaml buildCommand:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# This keeps the image ~10x smaller than the default GPU wheel.
+transformers==4.48.3
+sentence-transformers==3.4.1
+spacy==3.8.5
 
-torch
-transformers
-sentence-transformers
+# ── Utilities ────────────────────────────────────────────────────────────────
+numpy==1.26.4
+scikit-learn==1.6.1
+rapidfuzz==3.13.0
 
-rapidfuzz
-numpy
-scikit-learn
-
-pydantic
-
-requests
-
-beautifulsoup4
-
-lxml
-
-spacy
-streamlit
+# ── HTTP / Scraping ──────────────────────────────────────────────────────────
+requests==2.32.3
+beautifulsoup4==4.13.4
+lxml==5.4.0

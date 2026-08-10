@@ -4,8 +4,12 @@ verification/entity_extractor.py
 Wraps spaCy NER to extract entities from questions and answers.
 """
 
+import logging
+import traceback
 import spacy
 import functools
+
+logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=None)
 def get_spacy_model():
@@ -27,5 +31,8 @@ def extract_entities(text: str) -> list[str]:
             if ent.label_ in ("PERSON", "ORG", "GPE", "LOC", "FAC", "PRODUCT", "EVENT", "WORK_OF_ART"):
                 entities.append(ent.text.lower().strip())
         return list(set(entities))
-    except Exception:
+    except Exception as exc:
+        logger.error("[entity_extractor] extract_entities FAILED: %s: %s", type(exc).__name__, exc)
+        traceback.print_exc()
         return []
+

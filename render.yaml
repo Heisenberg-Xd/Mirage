@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: mirage-api
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: |
+      pip install --upgrade pip
+      pip install torch --index-url https://download.pytorch.org/whl/cpu
+      pip install -r requirements.txt
+      python -m spacy download en_core_web_sm
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: TRANSFORMERS_CACHE
+        value: /opt/render/.cache/huggingface
+      - key: HF_HOME
+        value: /opt/render/.cache/huggingface
+      - key: SENTENCE_TRANSFORMERS_HOME
+        value: /opt/render/.cache/sentence-transformers
