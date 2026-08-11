@@ -42,6 +42,9 @@ def _load_spacy():
         nlp = spacy.load("en_core_web_sm")
         logger.info("spaCy en_core_web_sm loaded successfully.")
         return nlp
+    except ImportError:
+        logger.warning("spaCy is not installed. Using sentence splitting fallback.")
+        raise
     except OSError:
         logger.error(
             "spaCy model 'en_core_web_sm' not found. "

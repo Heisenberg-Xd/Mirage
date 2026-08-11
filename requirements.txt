@@ -14,7 +14,6 @@ tavily-python==0.5.1
 # This keeps the image ~10x smaller than the default GPU wheel.
 transformers==4.48.3
 sentence-transformers==3.4.1
-spacy==3.8.5
 
 # ── Utilities ────────────────────────────────────────────────────────────────
 numpy==1.26.4

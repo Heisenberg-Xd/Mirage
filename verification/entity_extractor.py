@@ -6,7 +6,11 @@ Wraps spaCy NER to extract entities from questions and answers.
 
 import logging
 import traceback
-import spacy
+try:
+    import spacy
+except ImportError:
+    spacy = None
+
 import functools
 
 logger = logging.getLogger(__name__)
@@ -20,7 +24,7 @@ def extract_entities(text: str) -> list[str]:
     Extract Named Entities from text.
     Returns a list of lowercase entity strings.
     """
-    if not text:
+    if not text or spacy is None:
         return []
         
     try:

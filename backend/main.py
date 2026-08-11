@@ -89,22 +89,6 @@ async def preload_models():
     logger.info("\n[STARTUP]  Pre-loading ML models ...")
     t0 = time.time()
 
-    # 1. spaCy
-    try:
-        import spacy
-        logger.info("[STARTUP] Checking spaCy model 'en_core_web_sm' ...")
-        if not spacy.util.is_package("en_core_web_sm"):
-            logger.warning("[STARTUP] en_core_web_sm not found  running spacy download ...")
-            from spacy.cli import download as spacy_download
-            spacy_download("en_core_web_sm")
-        # actually load it to warm the cache
-        nlp = spacy.load("en_core_web_sm")
-        logger.info("[STARTUP] spaCy en_core_web_sm loaded (vocab size=%d) ", len(nlp.vocab))
-    except Exception as exc:
-        logger.error("[STARTUP] spaCy FAILED: %s: %s", type(exc).__name__, exc)
-        traceback.print_exc()
-        # Non-fatal  claim_extractor has a fallback
-
     # 2. CrossEncoder (relevance)
     try:
         logger.info("[STARTUP] Loading CrossEncoder ...")
@@ -482,17 +466,22 @@ def debug_serialization():
     t = time.time()
     try:
         import numpy as np
-        import spacy
-        nlp = spacy.blank("en")
-        doc = nlp("Hello world")
         data = {
             "np_int":    np.int32(42),
             "np_float":  np.float32(3.14),
             "np_array":  np.array([1, 2, 3]),
             "np_nan":    float("nan"),
-            "spacy_doc": doc,
             "a_set":     {1, 2, 3},
         }
+        
+        try:
+            import spacy
+            nlp = spacy.blank("en")
+            doc = nlp("Hello world")
+            data["spacy_doc"] = doc
+        except ImportError:
+            pass
+            
         safe = _to_json_safe(data)
         json.dumps(safe)   # final proof
         return {"status": "ok", "serialized": safe, "time_s": round(time.time() - t, 2)}
