@@ -15,17 +15,12 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 # Disable Flags for Low-Memory Environments
 # ---------------------------------------------------------------------------
-DISABLE_CROSS_ENCODER = os.getenv("DISABLE_CROSS_ENCODER", "false").lower() == "true"
 DISABLE_NLI           = os.getenv("DISABLE_NLI", "false").lower() == "true"
 DISABLE_SPACY         = os.getenv("DISABLE_SPACY", "false").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Model identifiers
 # ---------------------------------------------------------------------------
-
-# CrossEncoder model for claim-vs-evidence relevance scoring.
-# ms-marco-MiniLM-L-6-v2: fast (~22MB), optimised for retrieval re-ranking.
-CROSS_ENCODER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 # NLI model for Entailment / Contradiction / Neutral prediction.
 # DeBERTa v3 zero-shot is a robust NLI classifier.
@@ -50,20 +45,18 @@ MAX_EVIDENCE_RESULTS: int = 5
 # RapidFuzz similarity ratio [0, 100] above which two entities are considered matching.
 ENTITY_MATCH_THRESHOLD: float = 80.0
 
-# CrossEncoder relevance threshold above which a claim is considered "relevant"
-# to the user's question (to filter out hallucinated extra information).
-CLAIM_RELEVANCE_THRESHOLD: float = 0.50
+# NLI combined entailment+contradiction threshold to consider a claim related to the question.
+CLAIM_RELEVANCE_THRESHOLD: float = 0.15
 
 # ---------------------------------------------------------------------------
 # Composite confidence score weights
 # Must sum to 1.0 (100%)
 # ---------------------------------------------------------------------------
 CONFIDENCE_WEIGHTS: dict[str, float] = {
-    "nli_entailment":  0.30,   # Strongest signal: NLI says it's true
-    "ce_relevance":    0.20,   # CrossEncoder relevance of evidence to claim
+    "nli_entailment":  0.40,   # Strongest signal: NLI says it's true
     "entity_align":    0.15,   # Do answer entities match question entities?
-    "q_relevance":     0.10,   # Are the claims actually answering the question?
-    "authority":       0.10,   # Domain authority of supporting sources
+    "q_relevance":     0.15,   # Are the claims actually answering the question?
+    "authority":       0.15,   # Domain authority of supporting sources
     "diversity":       0.05,   # Number of unique supporting domains
     "support_ratio":   0.05,   # Ratio of supported vs contradicted claims
     "contradiction":   0.05,   # Penalty weight (subtracted or used as inverse signal)

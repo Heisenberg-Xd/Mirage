@@ -37,8 +37,6 @@ class EvidenceScore:
     The relevance and NLI score of one claim against one evidence source.
     """
     source_idx: int
-    raw_relevance_score: float      # CrossEncoder logit (or sigmoid)
-    sigmoid_relevance_score: float  # Normalised to [0,1]
     nli_score: Optional[NLIScore] = None
     verdict: str = "insufficient"   # "supported" | "insufficient" | "contradicted"
 
@@ -53,7 +51,6 @@ class ClaimVerification:
     supporting_count: int
     contradicting_count: int
     insufficient_count: int
-    best_relevance_score: float
     best_nli_entailment: float
     best_source_idx: int
     evidence_scores: list[EvidenceScore] = field(default_factory=list)

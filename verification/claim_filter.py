@@ -2,13 +2,13 @@
 verification/claim_filter.py
 ============================
 Filters extracted claims by checking their relevance to the original user question.
-Uses the CrossEncoder to score (Question, Claim).
+Uses the NLI model to score (Question, Claim).
 """
 
 import logging
 from .config import CLAIM_RELEVANCE_THRESHOLD
 from .models import Claim
-from .cross_encoder import load_cross_encoder, score_claim_against_evidence
+from .nli import load_nli_model, score_all_nli
 
 logger = logging.getLogger(__name__)
 
@@ -24,20 +24,26 @@ def filter_claims_by_question(claims: list[Claim], question: str) -> tuple[list[
     if not question or not claims:
         return claims, False
         
-    model = load_cross_encoder()
+    model = load_nli_model()
     
-    # We treat the question as the "claim" and the actual claims as the "evidence" for the CrossEncoder
-    # to see if the claim is relevant to the question.
+    # We use NLI to check if the claim is related to the question.
     claim_texts = [c.text for c in claims]
-    relevance_scores = score_claim_against_evidence(question, claim_texts, model)
+    
+    # score_all_nli expects claims_texts and evidence_paragraphs
+    # Here, question is the "claim" and claim_texts are the "evidence"
+    # Actually, score_all_nli takes (claims_texts, evidence_paragraphs) and returns [claim][evidence]
+    nli_scores = score_all_nli([question], claim_texts, model)
     
     has_hallucinated = False
     
     for i, claim in enumerate(claims):
-        score = relevance_scores[i] if i < len(relevance_scores) else 0.0
-        # If the claim is highly irrelevant to the question, we flag it.
-        # Note: sometimes a claim answers the question but uses different words. 
-        # CrossEncoder is generally good at semantic relevance.
+        nli_res = nli_scores[0][i] if (nli_scores and nli_scores[0] and i < len(nli_scores[0])) else None
+        
+        # A claim is relevant if the NLI model finds entailment or contradiction with the question.
+        # If it's purely neutral, it's not addressing the question.
+        # Or, we can just use a generic low threshold on non-neutrality.
+        score = (nli_res.entailment + nli_res.contradiction) if nli_res else 0.0
+        
         if score < CLAIM_RELEVANCE_THRESHOLD:
             claim.is_relevant_to_question = False
             has_hallucinated = True

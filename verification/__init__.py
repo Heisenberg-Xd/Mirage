@@ -9,14 +9,15 @@ Pipeline order:
     3. Claim extraction
     4. Claim filtering — keep only claims that directly answer the question
     5. Authority scoring
-    6. CrossEncoder scoring (relevance)
-    7. NLI scoring (entailment/contradiction per claim)
-    8. Evidence voting
-    9. Hallucination confidence scoring
-    10. Explanation template
+    6. NLI scoring (entailment/contradiction per claim)
+    7. Evidence voting
+    8. Hallucination confidence scoring
+    9. Explanation template
     → VerificationResult  (label: Not Hallucinating / Cannot Verify / Hallucinating)
 """
 
+import time
+import traceback
 import logging
 from .models import VerificationResult, Claim, ClaimVerification
 from .question_parser import parse_question
@@ -25,7 +26,6 @@ from .entity_alignment import check_entity_alignment
 from .claim_extractor import extract_claims
 from .claim_filter import filter_claims_by_question
 from .authority import score_all_sources, get_authority_label, get_authority_tier
-from .cross_encoder import load_cross_encoder, score_all_claims
 from .nli import load_nli_model, score_all_nli
 from .voting import vote_all_claims
 from .confidence import compute_confidence
@@ -47,11 +47,19 @@ def run_verification(
     # ------------------------------------------------------------------ #
     # Steps 1-2: Question parsing & Entity Alignment
     # ------------------------------------------------------------------ #
-    intent_data = parse_question(question)
-    q_entities = extract_entities(question)
-    a_entities = extract_entities(answer)
-    
-    drift_detected, entity_alignment_score, primary_q, primary_a = check_entity_alignment(q_entities, a_entities)
+    print("      [Verification] Step 1-2: Question Parsing & Entity Extraction...", end=" ", flush=True)
+    step_t = time.time()
+    try:
+        intent_data = parse_question(question)
+        q_entities = extract_entities(question)
+        a_entities = extract_entities(answer)
+        drift_detected, entity_alignment_score, primary_q, primary_a = check_entity_alignment(q_entities, a_entities)
+        print(f"SUCCESS ({time.time() - step_t:.2f}s)")
+    except Exception as e:
+        print(f"FAIL ({time.time() - step_t:.2f}s)")
+        print(f"Exception in Step 1-2: {type(e).__name__} - {e}")
+        traceback.print_exc()
+        raise
 
     # ------------------------------------------------------------------ #
     # Entity Drift Short-Circuit
@@ -83,8 +91,17 @@ def run_verification(
     # ------------------------------------------------------------------ #
     # Step 3: Extract atomic claims from the answer
     # ------------------------------------------------------------------ #
-    claims: list[Claim] = extract_claims(answer)
-    logger.info(f"Extracted {len(claims)} claim(s)")
+    print("      [Verification] Step 3: Claim Extraction...", end=" ", flush=True)
+    step_t = time.time()
+    try:
+        claims: list[Claim] = extract_claims(answer)
+        print(f"SUCCESS ({time.time() - step_t:.2f}s)")
+        logger.info(f"Extracted {len(claims)} claim(s)")
+    except Exception as e:
+        print(f"FAIL ({time.time() - step_t:.2f}s)")
+        print(f"Exception in Step 3: {type(e).__name__} - {e}")
+        traceback.print_exc()
+        raise
 
     if not claims:
         return _empty_result(answer, evidence)
@@ -100,58 +117,56 @@ def run_verification(
     authority_scores: list[float] = score_all_sources(evidence)
 
     # ------------------------------------------------------------------ #
-    # Step 6 & 7: CrossEncoder & NLI Inference
+    # Step 6: NLI Inference
     # ------------------------------------------------------------------ #
-    ce_model = load_cross_encoder()
-    nli_model = load_nli_model()
-    
-    evidence_paragraphs = [
-        src.get("content", "") for src in evidence if src.get("content", "").strip()
-    ]
-
-    para_to_evidence_idx = [
-        i for i, src in enumerate(evidence) if src.get("content", "").strip()
-    ]
-
-    claims_texts = [c.text for c in claims]
-    
-    # CE Relevance
-    all_ce_scores_raw = score_all_claims(claims_texts, evidence_paragraphs, ce_model)
-    # NLI Probabilities
-    all_nli_scores_raw = score_all_nli(claims_texts, evidence_paragraphs, nli_model)
-
-    n_evidence = len(evidence)
-    all_ce_scores = []
-    all_nli_scores = []
-    
-    from .models import NLIScore
-    
-    for i in range(len(claims_texts)):
-        # Expand CE
-        full_ce = [0.0] * n_evidence
-        claim_ce = all_ce_scores_raw[i] if i < len(all_ce_scores_raw) else []
-        for para_i, ev_i in enumerate(para_to_evidence_idx):
-            if para_i < len(claim_ce):
-                full_ce[ev_i] = claim_ce[para_i]
-        all_ce_scores.append(full_ce)
+    print("      [Verification] Step 6: NLI Scoring...", end=" ", flush=True)
+    step_t = time.time()
+    try:
+        nli_model = load_nli_model()
         
-        # Expand NLI
-        full_nli = [NLIScore(0.0, 0.0, 1.0) for _ in range(n_evidence)]
-        claim_nli = all_nli_scores_raw[i] if i < len(all_nli_scores_raw) else []
-        for para_i, ev_i in enumerate(para_to_evidence_idx):
-            if para_i < len(claim_nli):
-                full_nli[ev_i] = claim_nli[para_i]
-        all_nli_scores.append(full_nli)
+        evidence_paragraphs = [
+            src.get("content", "") for src in evidence if src.get("content", "").strip()
+        ]
+
+        para_to_evidence_idx = [
+            i for i, src in enumerate(evidence) if src.get("content", "").strip()
+        ]
+
+        claims_texts = [c.text for c in claims]
+        
+        # NLI Probabilities
+        all_nli_scores_raw = score_all_nli(claims_texts, evidence_paragraphs, nli_model)
+
+        n_evidence = len(evidence)
+        all_nli_scores = []
+        
+        from .models import NLIScore
+        
+        for i in range(len(claims_texts)):
+            # Expand NLI
+            full_nli = [NLIScore(0.0, 0.0, 1.0) for _ in range(n_evidence)]
+            claim_nli = all_nli_scores_raw[i] if i < len(all_nli_scores_raw) else []
+            for para_i, ev_i in enumerate(para_to_evidence_idx):
+                if para_i < len(claim_nli):
+                    full_nli[ev_i] = claim_nli[para_i]
+            all_nli_scores.append(full_nli)
+            
+        print(f"SUCCESS ({time.time() - step_t:.2f}s)")
+    except Exception as e:
+        print(f"FAIL ({time.time() - step_t:.2f}s)")
+        print(f"Exception in Step 6-7: {type(e).__name__} - {e}")
+        traceback.print_exc()
+        raise
 
     # ------------------------------------------------------------------ #
-    # Step 8: Evidence voting per claim (using NLI)
+    # Step 7: Evidence voting per claim (using NLI)
     # ------------------------------------------------------------------ #
     verifications: list[ClaimVerification] = vote_all_claims(
-        claims, evidence, all_ce_scores, all_nli_scores, authority_scores
+        claims, evidence, all_nli_scores, authority_scores
     )
 
     # ------------------------------------------------------------------ #
-    # Step 9: Composite confidence score + label
+    # Step 8: Composite confidence score + label
     # ------------------------------------------------------------------ #
     
     # Calculate extra context flags
@@ -165,7 +180,7 @@ def run_verification(
     confidence_pct = round(confidence_score * 100)
 
     # ------------------------------------------------------------------ #
-    # Step 10: Deterministic explanation
+    # Step 9: Deterministic explanation
     # ------------------------------------------------------------------ #
     explanation = generate_explanation(
         label, verifications, evidence, {},

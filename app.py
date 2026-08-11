@@ -697,7 +697,7 @@ def main():
                         <li><strong style="color:#F8FAFC">Entity Alignment</strong> —
                             RapidFuzz ensures the answer addresses the same subject as the question. Entity drift → Cannot Verify.</li>
                         <li><strong style="color:#F8FAFC">Question Relevance Filter</strong> —
-                            A CrossEncoder isolates claims that directly answer the question. Conversational filler is excluded unless it introduces a contradictory fact.</li>
+                            An NLI Model isolates claims that directly answer the question. Conversational filler is excluded unless it introduces a contradictory fact.</li>
                         <li><strong style="color:#F8FAFC">Query Expansion & Evidence Retrieval</strong> —
                             Queries are expanded and Tavily retrieves up to 5 live sources.</li>
                         <li><strong style="color:#F8FAFC">Natural Language Inference (NLI)</strong> —
