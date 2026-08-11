@@ -28,7 +28,7 @@ from typing import Optional
 
 import numpy as np
 
-from .config import CROSS_ENCODER_MODEL
+from .config import CROSS_ENCODER_MODEL, DISABLE_CROSS_ENCODER
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +51,22 @@ def _sigmoid(x: float) -> float:
 # ---------------------------------------------------------------------------
 
 _MODEL = None
+_CROSS_ENCODER_FAILED = False
 
 def load_cross_encoder():
     """
     Load the CrossEncoder model lazily on first request.
     This prevents memory spikes during server startup.
     """
-    global _MODEL
+    global _MODEL, _CROSS_ENCODER_FAILED
+    
+    if DISABLE_CROSS_ENCODER:
+        logger.info("CrossEncoder is DISABLED via environment.")
+        return None
+        
+    if _CROSS_ENCODER_FAILED:
+        return None
+        
     if _MODEL is not None:
         return _MODEL
 
@@ -70,8 +79,9 @@ def load_cross_encoder():
         logger.info("CrossEncoder loaded successfully.")
         return _MODEL
     except Exception as e:
-        logger.error(f"Failed to load CrossEncoder: {e}")
-        raise
+        logger.error(f"Failed to load CrossEncoder (Memory/Disk issue?). Disabling permanently. Error: {e}")
+        _CROSS_ENCODER_FAILED = True
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -127,8 +137,16 @@ def score_all_claims(
 
     All pairs are submitted in a single model.predict() call for efficiency.
     """
+    n_claims = len(claims_texts)
+    n_ev = len(evidence_paragraphs)
+    
     if not claims_texts or not evidence_paragraphs:
-        return [[0.0] * len(evidence_paragraphs)] * len(claims_texts)
+        return [[0.0] * n_ev] * n_claims
+        
+    if model is None:
+        # Fallback if CrossEncoder failed to load (e.g., OOM)
+        # Return neutral 0.60 relevance so voting can proceed via lexical/authority
+        return [[0.60] * n_ev for _ in range(n_claims)]
 
     # Flatten all (claim, evidence) pairs
     all_pairs: list[tuple[str, str]] = []

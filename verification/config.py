@@ -7,6 +7,18 @@ can be tuned in one place without touching pipeline logic.
 Includes support for evidence authority weighting and confidence margins.
 """
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ---------------------------------------------------------------------------
+# Disable Flags for Low-Memory Environments
+# ---------------------------------------------------------------------------
+DISABLE_CROSS_ENCODER = os.getenv("DISABLE_CROSS_ENCODER", "false").lower() == "true"
+DISABLE_NLI           = os.getenv("DISABLE_NLI", "false").lower() == "true"
+DISABLE_SPACY         = os.getenv("DISABLE_SPACY", "false").lower() == "true"
+
 # ---------------------------------------------------------------------------
 # Model identifiers
 # ---------------------------------------------------------------------------

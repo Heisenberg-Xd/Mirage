@@ -6,10 +6,16 @@ Wraps spaCy NER to extract entities from questions and answers.
 
 import logging
 import traceback
-try:
-    import spacy
-except ImportError:
+
+from .config import DISABLE_SPACY
+
+if DISABLE_SPACY:
     spacy = None
+else:
+    try:
+        import spacy
+    except ImportError:
+        spacy = None
 
 import functools
 

@@ -8,18 +8,27 @@ Predicts Entailment, Contradiction, or Neutral for a (Claim, Evidence) pair.
 import logging
 import functools
 import numpy as np
-from .config import NLI_MODEL
+from .config import NLI_MODEL, DISABLE_NLI
 from .models import NLIScore
 
 logger = logging.getLogger(__name__)
 
 _NLI_MODEL_INSTANCE = None
+_NLI_FAILED = False
 
 def load_nli_model():
     """
     Load the NLI CrossEncoder model lazily on first request.
     """
-    global _NLI_MODEL_INSTANCE
+    global _NLI_MODEL_INSTANCE, _NLI_FAILED
+    
+    if DISABLE_NLI:
+        logger.info("NLI Model is DISABLED via environment.")
+        return None
+        
+    if _NLI_FAILED:
+        return None
+        
     if _NLI_MODEL_INSTANCE is not None:
         return _NLI_MODEL_INSTANCE
 
@@ -32,8 +41,9 @@ def load_nli_model():
         logger.info(f"NLI model '{NLI_MODEL}' loaded.")
         return _NLI_MODEL_INSTANCE
     except Exception as e:
-        logger.error(f"Failed to load NLI model: {e}")
-        raise
+        logger.error(f"Failed to load NLI model (Memory/Disk issue?). Disabling permanently. Error: {e}")
+        _NLI_FAILED = True
+        return None
 
 def softmax(x):
     e_x = np.exp(x - np.max(x, axis=-1, keepdims=True))
@@ -84,6 +94,11 @@ def score_all_nli(claims_texts: list[str], evidence_paragraphs: list[str], model
     Batch score all claims against all evidence using NLI.
     """
     if not claims_texts or not evidence_paragraphs:
+        return [[NLIScore(0.0, 0.0, 1.0) for _ in evidence_paragraphs] for _ in claims_texts]
+        
+    if model is None:
+        # Fallback if NLI model failed to load (OOM).
+        # Return Neutral; the voting logic will pick up authority/lexical relevance as a fallback.
         return [[NLIScore(0.0, 0.0, 1.0) for _ in evidence_paragraphs] for _ in claims_texts]
         
     all_pairs = []

@@ -27,6 +27,7 @@ from typing import Optional
 
 from .models import Claim
 from .normalizer import normalize
+from .config import DISABLE_SPACY
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,9 @@ logger = logging.getLogger(__name__)
 @functools.lru_cache(maxsize=None)
 def _load_spacy():
     """Load and cache the spaCy model. Called once at startup."""
+    if DISABLE_SPACY:
+        raise ImportError("spaCy is DISABLED via environment.")
+        
     try:
         import spacy
         nlp = spacy.load("en_core_web_sm")

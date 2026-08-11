@@ -86,6 +86,13 @@ def vote_on_claim(
             ))
             logger.info(f"Claim: '{claim.raw_text}' | CE: {rel_score:.2f} | Ent: {nli.entailment:.2f} | Cont: {nli.contradiction:.2f} | Neut: {nli.neutral:.2f} | URL: {url} | Snippet: {snippet} | Verdict: IGNORED (Low Relevance)")
             continue
+        # Check if NLI model is disabled or crashed (fallback returns 0,0,1)
+        if nli.entailment == 0.0 and nli.contradiction == 0.0 and nli.neutral == 1.0:
+            # Fallback to lexical/authority scoring
+            if rel_score * auth > 0.40:
+                # Mock a strong entailment
+                nli = NLIScore(entailment=0.8, contradiction=0.0, neutral=0.2)
+                logger.info(f"NLI FALLBACK TRIGGERED: Claim '{claim.raw_text}' scored Supported based on Relevance ({rel_score:.2f}) and Authority ({auth:.2f})")
             
         # Ignore uncertain NLI predictions
         if max(nli.entailment, nli.contradiction) < MIN_NLI_CONFIDENCE:
