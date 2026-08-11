@@ -50,17 +50,25 @@ def _sigmoid(x: float) -> float:
 # Model loading — cached for the entire process lifetime
 # ---------------------------------------------------------------------------
 
-@functools.lru_cache(maxsize=None)
+_MODEL = None
+
 def load_cross_encoder():
     """
-    Load the CrossEncoder model from HuggingFace Hub and cache it.
-    This runs exactly once per Streamlit process lifetime.
+    Load the CrossEncoder model lazily on first request.
+    This prevents memory spikes during server startup.
     """
+    global _MODEL
+    if _MODEL is not None:
+        return _MODEL
+
     try:
+        logger.info(f"Loading CrossEncoder '{CROSS_ENCODER_MODEL}' (CPU only)...")
         from sentence_transformers import CrossEncoder
-        model = CrossEncoder(CROSS_ENCODER_MODEL)
-        logger.info(f"CrossEncoder '{CROSS_ENCODER_MODEL}' loaded.")
-        return model
+        # Force CPU to prevent any CUDA memory allocation
+        _MODEL = CrossEncoder(CROSS_ENCODER_MODEL, device="cpu")
+        _MODEL.model.eval()
+        logger.info("CrossEncoder loaded successfully.")
+        return _MODEL
     except Exception as e:
         logger.error(f"Failed to load CrossEncoder: {e}")
         raise
@@ -91,11 +99,18 @@ def score_claim_against_evidence(
     # Build (claim, evidence) pairs for batch inference
     pairs = [(claim_text, para) for para in evidence_paragraphs]
 
+    import torch
+    import gc
+
     try:
-        raw_scores: np.ndarray = model.predict(pairs, show_progress_bar=False)
+        model.model.eval()
+        with torch.inference_mode():
+            raw_scores: np.ndarray = model.predict(pairs, show_progress_bar=False)
     except Exception as e:
         logger.warning(f"CrossEncoder inference failed: {e}. Returning zeros.")
         return [0.0] * len(evidence_paragraphs)
+    finally:
+        gc.collect()
 
     sigmoid_scores = [_sigmoid(float(s)) for s in raw_scores]
     return sigmoid_scores
@@ -121,13 +136,20 @@ def score_all_claims(
         for para in evidence_paragraphs:
             all_pairs.append((ct, para))
 
+    import torch
+    import gc
+
     try:
-        raw_scores: np.ndarray = model.predict(all_pairs, show_progress_bar=False)
+        model.model.eval()
+        with torch.inference_mode():
+            raw_scores: np.ndarray = model.predict(all_pairs, show_progress_bar=False)
     except Exception as e:
         logger.warning(f"Batch CrossEncoder inference failed: {e}. Returning zeros.")
         n_claims = len(claims_texts)
         n_ev = len(evidence_paragraphs)
         return [[0.0] * n_ev for _ in range(n_claims)]
+    finally:
+        gc.collect()
 
     sigmoid_scores = [_sigmoid(float(s)) for s in raw_scores]
 

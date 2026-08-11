@@ -85,33 +85,9 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Startup  pre-load models so the first request is fast
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
-async def preload_models():
-    logger.info("\n[STARTUP]  Pre-loading ML models ...")
-    t0 = time.time()
-
-    # 2. CrossEncoder (relevance)
-    try:
-        logger.info("[STARTUP] Loading CrossEncoder ...")
-        from verification.cross_encoder import load_cross_encoder
-        ce = load_cross_encoder()
-        logger.info("[STARTUP] CrossEncoder loaded: %s ", type(ce).__name__)
-    except Exception as exc:
-        logger.error("[STARTUP] CrossEncoder FAILED: %s: %s", type(exc).__name__, exc)
-        traceback.print_exc()
-        # Non-fatal  inference will fall back to zeros
-
-    # 3. NLI model (DeBERTa)
-    try:
-        logger.info("[STARTUP] Loading NLI model ...")
-        from verification.nli import load_nli_model
-        nli = load_nli_model()
-        logger.info("[STARTUP] NLI model loaded: %s ", type(nli).__name__)
-    except Exception as exc:
-        logger.error("[STARTUP] NLI model FAILED: %s: %s", type(exc).__name__, exc)
-        traceback.print_exc()
-        # Non-fatal
-
-    logger.info("[STARTUP]  Initialization complete in %.2fs\n", time.time() - t0)
+async def startup_event():
+    logger.info("\n[STARTUP] Server starting...")
+    logger.info("[STARTUP] Models not loaded yet. Waiting for first verification request...\n")
 
 
 # ---------------------------------------------------------------------------

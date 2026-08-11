@@ -13,17 +13,24 @@ from .models import NLIScore
 
 logger = logging.getLogger(__name__)
 
-@functools.lru_cache(maxsize=None)
+_NLI_MODEL_INSTANCE = None
+
 def load_nli_model():
     """
-    Load the NLI CrossEncoder model.
+    Load the NLI CrossEncoder model lazily on first request.
     """
+    global _NLI_MODEL_INSTANCE
+    if _NLI_MODEL_INSTANCE is not None:
+        return _NLI_MODEL_INSTANCE
+
     try:
+        logger.info(f"Loading NLI model '{NLI_MODEL}' (CPU only)...")
         from sentence_transformers import CrossEncoder
-        # Loading NLI model
-        model = CrossEncoder(NLI_MODEL)
+        # Force CPU to prevent any CUDA memory allocation
+        _NLI_MODEL_INSTANCE = CrossEncoder(NLI_MODEL, device="cpu")
+        _NLI_MODEL_INSTANCE.model.eval()
         logger.info(f"NLI model '{NLI_MODEL}' loaded.")
-        return model
+        return _NLI_MODEL_INSTANCE
     except Exception as e:
         logger.error(f"Failed to load NLI model: {e}")
         raise
@@ -47,8 +54,13 @@ def score_nli(claim_text: str, evidence_paragraphs: list[str], model) -> list[NL
         
     pairs = [(para, claim_text) for para in evidence_paragraphs]
     
+    import torch
+    import gc
+
     try:
-        raw_scores = model.predict(pairs, show_progress_bar=False)
+        model.model.eval()
+        with torch.inference_mode():
+            raw_scores = model.predict(pairs, show_progress_bar=False)
         probs = softmax(raw_scores)
         
         nli_scores = []
@@ -64,6 +76,8 @@ def score_nli(claim_text: str, evidence_paragraphs: list[str], model) -> list[NL
     except Exception as e:
         logger.warning(f"NLI inference failed: {e}. Returning neutral.")
         return [NLIScore(0.0, 0.0, 1.0) for _ in evidence_paragraphs]
+    finally:
+        gc.collect()
 
 def score_all_nli(claims_texts: list[str], evidence_paragraphs: list[str], model) -> list[list[NLIScore]]:
     """
@@ -77,8 +91,13 @@ def score_all_nli(claims_texts: list[str], evidence_paragraphs: list[str], model
         for para in evidence_paragraphs:
             all_pairs.append((para, ct))
             
+    import torch
+    import gc
+
     try:
-        raw_scores = model.predict(all_pairs, show_progress_bar=False)
+        model.model.eval()
+        with torch.inference_mode():
+            raw_scores = model.predict(all_pairs, show_progress_bar=False)
         probs = softmax(raw_scores)
         
         flat_nli_scores = []
@@ -99,3 +118,5 @@ def score_all_nli(claims_texts: list[str], evidence_paragraphs: list[str], model
         logger.warning(f"Batch NLI inference failed: {e}")
         n_ev = len(evidence_paragraphs)
         return [[NLIScore(0.0, 0.0, 1.0) for _ in range(n_ev)] for _ in claims_texts]
+    finally:
+        gc.collect()
