@@ -420,6 +420,32 @@ def debug_entity():
         return {"status": "error", "type": type(exc).__name__, "msg": str(exc), "time_s": round(time.time() - t, 2)}
 
 
+@app.get("/debug/nli")
+def debug_nli():
+    """Test ONLY the NLI model (DeBERTa) — does it load and score correctly?"""
+    t = time.time()
+    try:
+        from verification.nli import load_nli_model, score_nli
+        model = load_nli_model()
+        if model is None:
+            return {"status": "disabled", "msg": "NLI model is disabled via DISABLE_NLI env var or previously failed to load.", "time_s": round(time.time() - t, 2)}
+        scores = score_nli(
+            "Paris is the capital of France.",
+            ["Paris is located in France and serves as the capital city."],
+            model,
+        )
+        return {
+            "status": "ok",
+            "entailment": scores[0].entailment,
+            "contradiction": scores[0].contradiction,
+            "neutral": scores[0].neutral,
+            "time_s": round(time.time() - t, 2),
+        }
+    except Exception as exc:
+        traceback.print_exc()
+        return {"status": "error", "type": type(exc).__name__, "msg": str(exc), "time_s": round(time.time() - t, 2)}
+
+
 @app.get("/debug/verification")
 def debug_verification():
     """Test ONLY the verification pipeline (no LLM, no Search)."""

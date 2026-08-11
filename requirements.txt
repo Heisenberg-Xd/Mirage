@@ -12,7 +12,6 @@ tavily-python==0.5.1
 # NOTE: torch (CPU-only) is installed first by render.yaml buildCommand:
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu
 # This keeps the image ~10x smaller than the default GPU wheel.
-transformers==4.48.3
 sentence-transformers==3.4.1
 
 # ── Utilities ────────────────────────────────────────────────────────────────
