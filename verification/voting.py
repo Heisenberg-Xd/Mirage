@@ -72,13 +72,15 @@ def vote_on_claim(
         url = source.get("url", "unknown")
         snippet = source.get("content", "")[:100].replace("\n", " ") + "..."
             
-        # Check if NLI model is disabled or crashed (fallback returns 0,0,1)
+        # Check if NLI model is disabled or crashed (fallback returns 0,0,1).
+        # When the NLI model fails, we MUST NOT fabricate entailment scores —
+        # that would produce false "Not Hallucinating" verdicts on OOM failures.
+        # Instead, mark the source as insufficient and continue.
         if nli.entailment == 0.0 and nli.contradiction == 0.0 and nli.neutral == 1.0:
-            # Fallback to lexical/authority scoring
-            if auth > 0.50:
-                # Mock a strong entailment
-                nli = NLIScore(entailment=0.8, contradiction=0.0, neutral=0.2)
-                logger.info(f"NLI FALLBACK TRIGGERED: Claim '{claim.raw_text}' scored Supported based on Authority ({auth:.2f})")
+            logger.debug(
+                "NLI neutral fallback for claim '%s' source %d — marking insufficient.",
+                claim.raw_text[:60], i,
+            )
             
         # Ignore uncertain NLI predictions
         if max(nli.entailment, nli.contradiction) < MIN_NLI_CONFIDENCE:

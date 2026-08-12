@@ -16,10 +16,12 @@ Pipeline order:
     → VerificationResult  (label: Not Hallucinating / Cannot Verify / Hallucinating)
 """
 
+import gc
 import time
 import traceback
 import logging
-from .models import VerificationResult, Claim, ClaimVerification
+
+from .models import VerificationResult, Claim, ClaimVerification, NLIScore
 from .question_parser import parse_question
 from .entity_extractor import extract_entities
 from .entity_alignment import check_entity_alignment
@@ -42,22 +44,21 @@ def run_verification(
     """
     Run the complete deterministic NLI-based fact verification pipeline.
     """
-    logger.info(f"[run_verification] question='{question[:80]}', n_evidence={len(evidence)}")
+    logger.info("[run_verification] question='%s', n_evidence=%d", question[:80], len(evidence))
 
     # ------------------------------------------------------------------ #
     # Steps 1-2: Question parsing & Entity Alignment
     # ------------------------------------------------------------------ #
-    print("      [Verification] Step 1-2: Question Parsing & Entity Extraction...", end=" ", flush=True)
+    logger.info("[Step 1-2] Question Parsing & Entity Extraction...")
     step_t = time.time()
     try:
         intent_data = parse_question(question)
         q_entities = extract_entities(question)
         a_entities = extract_entities(answer)
         drift_detected, entity_alignment_score, primary_q, primary_a = check_entity_alignment(q_entities, a_entities)
-        print(f"SUCCESS ({time.time() - step_t:.2f}s)")
+        logger.info("[Step 1-2] SUCCESS (%.2fs)", time.time() - step_t)
     except Exception as e:
-        print(f"FAIL ({time.time() - step_t:.2f}s)")
-        print(f"Exception in Step 1-2: {type(e).__name__} - {e}")
+        logger.error("[Step 1-2] FAIL (%.2fs): %s - %s", time.time() - step_t, type(e).__name__, e)
         traceback.print_exc()
         raise
 
@@ -65,7 +66,7 @@ def run_verification(
     # Entity Drift Short-Circuit
     # ------------------------------------------------------------------ #
     if drift_detected:
-        logger.warning(f"Entity Drift Detected! Q_entity: '{primary_q}', A_entity: '{primary_a}'")
+        logger.warning("Entity Drift Detected! Q_entity: '%s', A_entity: '%s'", primary_q, primary_a)
         explanation = (
             f"The model answered about a different entity ('{primary_a}') instead of the one "
             f"requested by the user ('{primary_q}'). Hallucination status cannot be determined "
@@ -91,15 +92,13 @@ def run_verification(
     # ------------------------------------------------------------------ #
     # Step 3: Extract atomic claims from the answer
     # ------------------------------------------------------------------ #
-    print("      [Verification] Step 3: Claim Extraction...", end=" ", flush=True)
+    logger.info("[Step 3] Claim Extraction...")
     step_t = time.time()
     try:
         claims: list[Claim] = extract_claims(answer)
-        print(f"SUCCESS ({time.time() - step_t:.2f}s)")
-        logger.info(f"Extracted {len(claims)} claim(s)")
+        logger.info("[Step 3] SUCCESS (%.2fs) — %d claim(s)", time.time() - step_t, len(claims))
     except Exception as e:
-        print(f"FAIL ({time.time() - step_t:.2f}s)")
-        print(f"Exception in Step 3: {type(e).__name__} - {e}")
+        logger.error("[Step 3] FAIL (%.2fs): %s - %s", time.time() - step_t, type(e).__name__, e)
         traceback.print_exc()
         raise
 
@@ -109,6 +108,7 @@ def run_verification(
     # ------------------------------------------------------------------ #
     # Step 4: Question Relevance Filter
     # ------------------------------------------------------------------ #
+    logger.info("[Step 4] Claim Relevance Filtering...")
     claims, has_hallucinated_claims = filter_claims_by_question(claims, question)
 
     # ------------------------------------------------------------------ #
@@ -119,11 +119,11 @@ def run_verification(
     # ------------------------------------------------------------------ #
     # Step 6: NLI Inference
     # ------------------------------------------------------------------ #
-    print("      [Verification] Step 6: NLI Scoring...", end=" ", flush=True)
+    logger.info("[Step 6] NLI Scoring...")
     step_t = time.time()
     try:
         nli_model = load_nli_model()
-        
+
         evidence_paragraphs = [
             src.get("content", "") for src in evidence if src.get("content", "").strip()
         ]
@@ -133,30 +133,29 @@ def run_verification(
         ]
 
         claims_texts = [c.text for c in claims]
-        
+
         # NLI Probabilities
         all_nli_scores_raw = score_all_nli(claims_texts, evidence_paragraphs, nli_model)
 
         n_evidence = len(evidence)
         all_nli_scores = []
-        
-        from .models import NLIScore
-        
+
         for i in range(len(claims_texts)):
-            # Expand NLI
-            full_nli = [NLIScore(0.0, 0.0, 1.0) for _ in range(n_evidence)]
+            # Expand NLI scores back to full evidence index space
+            full_nli = [NLIScore(entailment=0.0, contradiction=0.0, neutral=1.0) for _ in range(n_evidence)]
             claim_nli = all_nli_scores_raw[i] if i < len(all_nli_scores_raw) else []
             for para_i, ev_i in enumerate(para_to_evidence_idx):
                 if para_i < len(claim_nli):
                     full_nli[ev_i] = claim_nli[para_i]
             all_nli_scores.append(full_nli)
-            
-        print(f"SUCCESS ({time.time() - step_t:.2f}s)")
+
+        logger.info("[Step 6] SUCCESS (%.2fs)", time.time() - step_t)
     except Exception as e:
-        print(f"FAIL ({time.time() - step_t:.2f}s)")
-        print(f"Exception in Step 6-7: {type(e).__name__} - {e}")
+        logger.error("[Step 6] FAIL (%.2fs): %s - %s", time.time() - step_t, type(e).__name__, e)
         traceback.print_exc()
         raise
+    finally:
+        gc.collect()
 
     # ------------------------------------------------------------------ #
     # Step 7: Evidence voting per claim (using NLI)
@@ -168,7 +167,7 @@ def run_verification(
     # ------------------------------------------------------------------ #
     # Step 8: Composite confidence score + label
     # ------------------------------------------------------------------ #
-    
+
     # Calculate extra context flags
     irrelevant_verifs = [cv for cv in verifications if not getattr(cv.claim, 'is_relevant_to_question', True)]
     has_false_hallucination = any(cv.verdict == "contradicted" for cv in irrelevant_verifs)
@@ -191,10 +190,15 @@ def run_verification(
     # Aggregate counts for UI (only counting relevant claims)
     # ------------------------------------------------------------------ #
     relevant_verifs = [cv for cv in verifications if getattr(cv.claim, 'is_relevant_to_question', True)]
-    
+
     supported_count    = sum(1 for cv in relevant_verifs if cv.verdict == "supported")
     contradicted_count = sum(1 for cv in relevant_verifs if cv.verdict == "contradicted")
     insufficient_count = sum(1 for cv in relevant_verifs if cv.verdict == "insufficient")
+
+    logger.info(
+        "[run_verification] DONE — label=%s pct=%d supported=%d contradicted=%d",
+        label, confidence_pct, supported_count, contradicted_count,
+    )
 
     return VerificationResult(
         label=label,

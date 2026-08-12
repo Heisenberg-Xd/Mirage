@@ -10,7 +10,7 @@ export const api = {
     return this.request<T>(path, { ...options, method: 'GET' });
   },
 
-  async post<T>(path: string, body: any, options: FetchOptions = {}): Promise<T> {
+  async post<T>(path: string, body: unknown, options: FetchOptions = {}): Promise<T> {
     return this.request<T>(path, {
       ...options,
       method: 'POST',
@@ -24,7 +24,7 @@ export const api = {
   },
 
   async request<T>(path: string, options: FetchOptions): Promise<T> {
-    const { onRetry, timeoutMs = 60000, ...customConfig } = options;
+    const { onRetry, timeoutMs = 120000, ...customConfig } = options;
     const url = `${API_URL}${path}`;
     
     let attempt = 0;
@@ -43,12 +43,16 @@ export const api = {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-          // If it's a server error (502/503 from Render waking up), we can retry
+          // If it's a server error (502/503 from backend waking up), we can retry
           if (response.status >= 500 && attempt < maxAttempts - 1) {
-            throw new Error(`Server Error: ${response.status}`);
+            const err = new Error(`Server Error: ${response.status}`);
+            (err as any).status = response.status;
+            throw err;
           }
           const errorText = await response.text().catch(() => 'Unknown error');
-          throw new Error(`Server responded with ${response.status}: ${errorText}`);
+          const err = new Error(`Server responded with ${response.status}: ${errorText}`);
+          (err as any).status = response.status;
+          throw err;
         }
 
         return (await response.json()) as T;
@@ -56,7 +60,7 @@ export const api = {
         clearTimeout(timeoutId);
 
         // Don't retry client errors (4xx) unless explicitly handled
-        if (error.message.includes('Server responded with 4')) {
+        if (error.status && error.status >= 400 && error.status < 500) {
           throw error;
         }
 

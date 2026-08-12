@@ -2,39 +2,34 @@
 verification/entity_extractor.py
 ================================
 Wraps spaCy NER to extract entities from questions and answers.
+
+Uses the shared spacy_loader module — the model is never loaded twice.
 """
 
 import logging
 import traceback
 
-from .config import DISABLE_SPACY
-
-if DISABLE_SPACY:
-    spacy = None
-else:
-    try:
-        import spacy
-    except ImportError:
-        spacy = None
-
-import functools
-
 logger = logging.getLogger(__name__)
 
-@functools.lru_cache(maxsize=None)
-def get_spacy_model():
-    return spacy.load("en_core_web_sm")
 
 def extract_entities(text: str) -> list[str]:
     """
-    Extract Named Entities from text.
-    Returns a list of lowercase entity strings.
+    Extract Named Entities from text using spaCy.
+    Returns a deduplicated list of lowercase entity strings.
+
+    Falls back to an empty list if spaCy is unavailable or DISABLED.
     """
-    if not text or spacy is None:
+    if not text:
         return []
-        
+
     try:
+        from .spacy_loader import get_spacy_model
         nlp = get_spacy_model()
+    except (ImportError, RuntimeError, OSError) as e:
+        logger.warning("[entity_extractor] spaCy unavailable: %s — returning no entities.", e)
+        return []
+
+    try:
         doc = nlp(text)
         entities = []
         for ent in doc.ents:
@@ -45,4 +40,3 @@ def extract_entities(text: str) -> list[str]:
         logger.error("[entity_extractor] extract_entities FAILED: %s: %s", type(exc).__name__, exc)
         traceback.print_exc()
         return []
-

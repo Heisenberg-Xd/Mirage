@@ -18,44 +18,17 @@ Design:
     the keyword-window heuristic used in the old pipeline.
   - Very short sentences (<4 tokens after stripping stop words) are dropped
     as they carry insufficient factual content for verification.
+  - Uses the shared spacy_loader so the spaCy model is never duplicated in RAM.
 """
 
 import re
 import logging
-import functools
 from typing import Optional
 
 from .models import Claim
 from .normalizer import normalize
-from .config import DISABLE_SPACY
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# spaCy model — loaded once and cached
-# ---------------------------------------------------------------------------
-
-@functools.lru_cache(maxsize=None)
-def _load_spacy():
-    """Load and cache the spaCy model. Called once at startup."""
-    if DISABLE_SPACY:
-        raise ImportError("spaCy is DISABLED via environment.")
-        
-    try:
-        import spacy
-        nlp = spacy.load("en_core_web_sm")
-        logger.info("spaCy en_core_web_sm loaded successfully.")
-        return nlp
-    except ImportError:
-        logger.warning("spaCy is not installed. Using sentence splitting fallback.")
-        raise
-    except OSError:
-        logger.error(
-            "spaCy model 'en_core_web_sm' not found. "
-            "Run: python -m spacy download en_core_web_sm"
-        )
-        raise
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -87,8 +60,7 @@ def _is_content_rich(sentence: str, min_tokens: int = 4) -> bool:
 def _detect_negation_in_span(token) -> bool:
     """
     Return True if any child of the given verb/root token is a negation
-    modifier (dep_ == "neg"), or if the sentence contains explicit negation
-    patterns.
+    modifier (dep_ == "neg").
     """
     for child in token.children:
         if child.dep_ == "neg":
@@ -111,14 +83,11 @@ def _split_at_coordinators(sent, nlp) -> list[str]:
     Returns a list of string sub-claims.
     """
     text = sent.text.strip()
-    # Simple heuristic: split on ", and " / "; and " / ". And " only when
-    # the second part has its own subject (capital letter or pronoun follows)
     parts = re.split(r"(?:,\s+|\.\s+|;\s+)(?:and|but|or|while|whereas|although)\s+",
                      text, flags=re.IGNORECASE)
     if len(parts) > 1:
         return [p.strip() for p in parts if len(p.strip()) > 10]
     return [text]
-
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -129,12 +98,14 @@ def extract_claims(answer: str) -> list[Claim]:
     Extract a list of atomic factual claims from the LLM's answer.
 
     Steps:
-      1. Parse with spaCy for sentence segmentation.
+      1. Parse with spaCy for sentence segmentation (shared model).
       2. Split compound sentences at coordinating conjunctions.
       3. Drop filler / too-short sentences.
       4. Detect negation via syntactic dependency arcs.
       5. Extract named entities for focused voting downstream.
       6. Normalize the claim text for comparison.
+
+    Falls back to simple regex sentence splitting if spaCy is unavailable.
 
     Returns:
         List of Claim dataclass instances. May be empty if no verifiable
@@ -144,9 +115,10 @@ def extract_claims(answer: str) -> list[Claim]:
         return []
 
     try:
-        nlp = _load_spacy()
+        from .spacy_loader import get_spacy_model
+        nlp = get_spacy_model()
     except Exception as e:
-        logger.warning(f"spaCy unavailable ({e}). Falling back to sentence splitting.")
+        logger.warning("spaCy unavailable (%s). Falling back to sentence splitting.", e)
         return _fallback_extract(answer)
 
     doc = nlp(answer)
@@ -183,7 +155,7 @@ def extract_claims(answer: str) -> list[Claim]:
                     r"\b(not|never|no|isn'?t|aren'?t|wasn'?t|weren'?t|"
                     r"doesn'?t|don'?t|didn'?t|cannot|can'?t|won'?t|"
                     r"wouldn'?t|shouldn'?t|couldn'?t|neither|nor|false|"
-                    r"incorrect|wrong|untrue|denied|denied)\b",
+                    r"incorrect|wrong|untrue|denied)\\b",
                     re.IGNORECASE,
                 )
                 is_negated = bool(neg_keywords.search(sub_text))

@@ -9,17 +9,26 @@ groq==0.29.0
 tavily-python==0.5.1
 
 # ── ML / NLP ─────────────────────────────────────────────────────────────────
-# NOTE: torch (CPU-only) is installed first by render.yaml buildCommand:
+# IMPORTANT: torch (CPU-only) MUST be installed BEFORE sentence-transformers.
+# In the Dockerfile this is handled by an explicit pip install step:
+#   pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
+# When installing locally for development, run:
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu
-# This keeps the image ~10x smaller than the default GPU wheel.
+#   pip install -r requirements.txt
 sentence-transformers==3.4.1
+
+# ── spaCy (NER + dependency parsing for claim/entity extraction) ──────────────
+# After installing, download the model: python -m spacy download en_core_web_sm
+spacy==3.8.7
 
 # ── Utilities ────────────────────────────────────────────────────────────────
 numpy==1.26.4
 scikit-learn==1.6.1
 rapidfuzz==3.13.0
 
-# ── HTTP / Scraping ──────────────────────────────────────────────────────────
+# ── HTTP ─────────────────────────────────────────────────────────────────────
 requests==2.32.3
-beautifulsoup4==4.13.4
-lxml==5.4.0
+
+# ── REMOVED (unused — Tavily provides pre-parsed content): ───────────────────
+# beautifulsoup4 — not imported anywhere in the verification pipeline
+# lxml          — not imported anywhere in the verification pipeline

@@ -89,7 +89,7 @@ def _get_stats(verifications: list[ClaimVerification], evidence: list[dict]) -> 
                     supporting_source_ids.add(es.source_idx)
     n_supporting_sources = len(supporting_source_ids)
 
-    best_pct = max((cv.best_relevance_score for cv in verifications), default=0.0)
+    best_pct = max((cv.best_nli_entailment for cv in verifications), default=0.0)
 
     has_negation = any(cv.claim.is_negated for cv in verifications)
     n_contradicted_sources = n_contradicted  # one source per contradicted claim (conservative)
@@ -200,7 +200,7 @@ def generate_claim_summary(verifications: list[ClaimVerification]) -> list[dict]
         rows.append({
             "claim":          cv.claim.raw_text,
             "verdict":        cv.verdict if is_relevant else "ignored",
-            "best_score_pct": round(cv.best_relevance_score * 100),
+            "best_score_pct": round(cv.best_nli_entailment * 100),
             "best_nli_pct":   round(cv.best_nli_entailment * 100),
             "is_negated":     cv.claim.is_negated,
             "is_relevant":    is_relevant,

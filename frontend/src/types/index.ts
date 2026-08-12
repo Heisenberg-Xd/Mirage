@@ -23,8 +23,6 @@ export interface Claim {
 // ─────────────────────────────────────────────────────────────────────────────
 export interface EvidenceScore {
   source_idx: number;
-  raw_relevance_score: number;
-  sigmoid_relevance_score: number;
   nli_score: NLIScore | null;
   verdict: string;
 }
