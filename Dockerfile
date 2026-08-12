@@ -70,7 +70,6 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy pre-downloaded model caches from builder
 COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
-COPY --from=builder /root/.cache/sentence-transformers /root/.cache/sentence-transformers
 
 # Copy application source
 COPY backend/ ./backend/
