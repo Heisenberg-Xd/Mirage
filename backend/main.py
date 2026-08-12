@@ -296,23 +296,9 @@ def health():
 
 @app.get("/health/ready")
 def health_ready():
-    """
-    Readiness probe — returns 503 until startup models are loaded.
-    Railway can use this as the health check path.
-    """
-    if not _is_ready:
-        return JSONResponse(
-            status_code=503,
-            content={"ready": False, "message": "Models are still loading..."},
-        )
     return {
         "ready": True,
-        "service": "Mirage Verification API",
-        "python": sys.version.split()[0],
-        "env": {
-            "GROQ_API_KEY":   "set" if GROQ_API_KEY   else "MISSING",
-            "TAVILY_API_KEY": "set" if TAVILY_API_KEY else "MISSING",
-        },
+        "service": "Mirage Verification API"
     }
 
 # ---------------------------------------------------------------------------
