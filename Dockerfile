@@ -84,17 +84,11 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # Railway injects $PORT at runtime
-EXPOSE 8000
+EXPOSE 8080
 
 # Health check — Railway uses this to determine readiness
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8000}/health/ready || exit 1
+
 
 # Use 1 worker — DeBERTa is memory-hungry; multiple workers would OOM.
 # --timeout 120 matches VERIFY_TIMEOUT env var.
-CMD uvicorn backend.main:app \
-    --host 0.0.0.0 \
-    --port ${PORT:-8000} \
-    --workers 1 \
-    --timeout-keep-alive 120 \
-    --log-level info
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --timeout-keep-alive 120 --log-level info"]
