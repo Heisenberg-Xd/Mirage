@@ -6,6 +6,7 @@ Orchestrates Tavily search across expanded queries and deduplicates results.
 
 import os
 import logging
+import traceback
 from tavily import TavilyClient
 from typing import List, Dict, Any
 from .config import MAX_EVIDENCE_RESULTS
@@ -46,7 +47,8 @@ def search_evidence_expanded(question: str, max_results: int = MAX_EVIDENCE_RESU
                         "title": r.get("title", "")
                     })
         except Exception as e:
-            logger.warning(f"Tavily search failed for query '{q}': {e}")
+            logger.warning(f"Tavily search failed for query '{q}': {type(e).__name__} - {e}")
+            traceback.print_exc()
             
     # Return the top N results
     return all_results[:max_results]
