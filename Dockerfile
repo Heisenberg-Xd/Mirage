@@ -50,7 +50,7 @@ ENV TRANSFORMERS_CACHE=/root/.cache/huggingface
 
 RUN python -c "\
 from sentence_transformers import CrossEncoder; \
-m = CrossEncoder('cross-encoder/nli-deberta-v3-base', device='cpu'); \
+m = CrossEncoder('cross-encoder/nli-distilroberta-base', device='cpu'); \
 print('NLI model pre-downloaded successfully.') \
 "
 
